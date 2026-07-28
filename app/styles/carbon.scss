@@ -1799,4 +1799,136 @@ body {
     width: auto;
     min-width: 8rem;
   }
+
+  /* ── Global mobile tighten ── */
+
+  :root {
+    --container-pad: #{$spacing-04};
+  }
+
+  /* tile padding — be selective (global !important may break Carbon popovers/dropdowns) */
+  .home-stat-card.cds--tile {
+    padding: $spacing-04 !important;
+  }
+
+  .detail-metric-card.cds--tile {
+    padding: $spacing-04 !important;
+    min-height: 4.5rem;
+  }
+
+  .detail-section.cds--tile {
+    padding: $spacing-04 !important;
+  }
+
+  .node-card.cds--tile {
+    padding: 0 0 $spacing-03 0 !important;
+    gap: $spacing-04;
+  }
+
+  /* tighter section gaps */
+  .detail {
+    gap: $spacing-04;
+  }
+
+  .detail-finance-grid {
+    gap: $spacing-04;
+  }
+
+  .detail-info-grid {
+    gap: $spacing-04;
+  }
+
+  .ping-chart-panel {
+    gap: $spacing-04;
+  }
+
+  /* smaller headings on mobile */
+  .home-stat-card__value {
+    @include type-style("productive-heading-03");
+  }
+
+  .detail-title {
+    @include type-style("productive-heading-02");
+  }
+
+  .detail-metric-card__value {
+    @include type-style("productive-heading-02");
+  }
+
+  /* compact node cards */
+  .node-card__head {
+    padding: $spacing-03 $spacing-03 0;
+  }
+
+  .node-card__sub {
+    padding: 0 $spacing-03;
+  }
+
+  .node-card__tags {
+    padding: 0 $spacing-03;
+  }
+
+  .card-section {
+    padding: 0 $spacing-03;
+  }
+
+  .card-kv-grid {
+    gap: $spacing-03;
+  }
+
+  /* smaller node card title */
+  .node-card__title {
+    @include type-style("productive-heading-01");
+  }
+
+  /* chart panel compact */
+  .ping-task-grid {
+    gap: $spacing-02;
+  }
+
+  .ping-chart-main.cds--tile {
+    padding: $spacing-04;
+  }
+
+  /* node map smaller */
+  .node-map.cds--tile {
+    min-height: 10rem;
+  }
+
+  /* chart empty states */
+  .load-chart-card__empty {
+    min-height: 8rem;
+  }
+
+  .ping-chart-main__empty {
+    min-height: 10rem;
+  }
+
+  /* table cells compact */
+  .cds--data-table td {
+    padding-block: $spacing-03 !important;
+  }
+
+  /* finance popover */
+  .finance-popover__content {
+    width: min(18rem, 92vw);
+  }
+
+  /* section titles */
+  .detail-section__title {
+    @include type-style("heading-compact-01");
+  }
+
+  /* load chart tabs compact */
+  .chart-range-tabs.cds--tab--list {
+    gap: 0;
+  }
+
+  /* footer tighter */
+  .app-footer__row {
+    padding-block: $spacing-03;
+    flex-direction: column;
+    gap: $spacing-02;
+    text-align: center;
+  }
 }

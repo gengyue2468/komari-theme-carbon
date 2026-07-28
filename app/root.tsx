@@ -25,7 +25,8 @@ export function meta({}: Route.MetaArgs) {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // lang is synced client-side from i18n; suppress mismatch with localStorage
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />

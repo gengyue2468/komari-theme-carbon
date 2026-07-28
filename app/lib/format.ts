@@ -64,10 +64,54 @@ export function percentOf(used: number, total: number): number {
   return Math.min(100, Math.max(0, (used / total) * 100));
 }
 
+/**
+ * Traffic used bytes per Komari traffic_limit_type:
+ * max | sum | up | down (default max).
+ */
+export function trafficUsedBytes(
+  totalUp: number,
+  totalDown: number,
+  limitType?: string | null,
+): number {
+  const up = totalUp || 0;
+  const down = totalDown || 0;
+  switch ((limitType || "max").toLowerCase()) {
+    case "sum":
+      return up + down;
+    case "up":
+      return up;
+    case "down":
+      return down;
+    case "max":
+    default:
+      return Math.max(up, down);
+  }
+}
+
 export function parseTags(tags: string): string[] {
   if (!tags.trim()) return [];
   return tags
     .split(/[;,|]/)
     .map((t) => t.trim())
     .filter(Boolean);
+}
+
+/** Coerce managed theme_settings that may arrive as strings. */
+export function asNumber(
+  raw: unknown,
+  fallback: number,
+  min?: number,
+  max?: number,
+): number {
+  const n =
+    typeof raw === "number"
+      ? raw
+      : typeof raw === "string" && raw.trim() !== ""
+        ? Number(raw)
+        : NaN;
+  if (!Number.isFinite(n)) return fallback;
+  let v = n;
+  if (min != null) v = Math.max(min, v);
+  if (max != null) v = Math.min(max, v);
+  return v;
 }

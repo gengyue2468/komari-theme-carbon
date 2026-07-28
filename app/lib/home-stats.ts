@@ -1,4 +1,9 @@
-import { formatBytes, formatRate, isNeverExpire } from "~/lib/format";
+import {
+  formatBytes,
+  formatRate,
+  isNeverExpire,
+  trafficUsedBytes,
+} from "~/lib/format";
 import type { NodeInfo, RealtimeMetrics } from "~/types/komari";
 
 export interface HomeStatItem {
@@ -44,7 +49,11 @@ export function computeHomeStats(
     if (m) {
       ramUsed += m.ram.used || 0;
       diskUsed += m.disk.used || 0;
-      traffic += Math.max(m.network.totalUp || 0, m.network.totalDown || 0);
+      traffic += trafficUsedBytes(
+        m.network.totalUp || 0,
+        m.network.totalDown || 0,
+        n.traffic_limit_type,
+      );
       if (online.has(n.uuid)) {
         up += m.network.up || 0;
         down += m.network.down || 0;

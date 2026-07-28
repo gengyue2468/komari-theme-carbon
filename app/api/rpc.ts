@@ -382,12 +382,31 @@ export async function rpcGetNodeRecentStatus(
   return { count: res.count ?? 0, records: res.records ?? [] };
 }
 
+/**
+ * Komari getRecords:
+ * - load: often `{ [uuid]: StatusRecord[] }` (map)
+ * - ping: often `PingRecord[]` (array)
+ * Always normalize to a flat array.
+ */
+export function normalizeRecordList<T>(
+  records: T[] | Record<string, T[]> | undefined,
+  uuid?: string,
+): T[] {
+  if (!records) return [];
+  if (Array.isArray(records)) return records;
+  if (uuid && Array.isArray(records[uuid])) return records[uuid];
+  return Object.values(records).flat();
+}
+
 export async function rpcGetLoadRecords(
   uuid: string,
   hours: number,
   signal?: AbortSignal,
 ): Promise<{ count: number; records: RpcStatusRecord[] }> {
-  return getRpc().call(
+  const res = await getRpc().call<{
+    count?: number;
+    records?: RpcStatusRecord[] | Record<string, RpcStatusRecord[]>;
+  }>(
     "common:getRecords",
     {
       type: "load",
@@ -398,6 +417,8 @@ export async function rpcGetLoadRecords(
     15000,
     signal,
   );
+  const records = normalizeRecordList(res.records, uuid);
+  return { count: res.count ?? records.length, records };
 }
 
 export async function rpcGetPingRecords(
@@ -410,7 +431,17 @@ export async function rpcGetPingRecords(
   tasks?: RpcPingTaskInfo[];
   basic_info?: Array<{ client: string; loss: number; min: number; max: number }>;
 }> {
-  return getRpc().call(
+  const res = await getRpc().call<{
+    count?: number;
+    records?: RpcPingRecord[] | Record<string, RpcPingRecord[]>;
+    tasks?: RpcPingTaskInfo[];
+    basic_info?: Array<{
+      client: string;
+      loss: number;
+      min: number;
+      max: number;
+    }>;
+  }>(
     "common:getRecords",
     {
       type: "ping",
@@ -421,4 +452,11 @@ export async function rpcGetPingRecords(
     15000,
     signal,
   );
+  const records = normalizeRecordList(res.records, uuid);
+  return {
+    count: res.count ?? records.length,
+    records,
+    tasks: res.tasks,
+    basic_info: res.basic_info,
+  };
 }

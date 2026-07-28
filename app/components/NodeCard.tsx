@@ -1,4 +1,4 @@
-import { ClickableTile, ProgressBar, Tag } from "@carbon/react";
+import { ClickableTile, Tag } from "@carbon/react";
 import { ArrowDown, ArrowUp } from "@carbon/icons-react";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,7 +7,14 @@ import { cardPingFromMetrics } from "~/lib/ping-display";
 import { barToneClass, latencyToneClass } from "~/lib/ping-tone";
 import { QuickIcon } from "~/components/BrandIcon";
 import { RegionFlag } from "~/components/RegionFlag";
-import { formatBytes, formatRate, formatUptime, parseTags, percentOf } from "~/lib/format";
+import {
+  formatBytes,
+  formatRate,
+  formatUptime,
+  parseTags,
+  percentOf,
+  trafficUsedBytes,
+} from "~/lib/format";
 import { getArchIcon, getOsIcon, getVirtIcon } from "~/lib/os-arch";
 import type { NodeInfo, RealtimeMetrics } from "~/types/komari";
 
@@ -61,6 +68,16 @@ function Row({ label, children }: { label: React.ReactNode; children: React.Reac
 
 /* ── Ping sparkline ── */
 
+function sparkHeightPct(metric: "latency" | "loss", v: number | null): number {
+  if (v == null) return 18;
+  if (metric === "latency") {
+    // 0–300ms → ~25%–100%
+    return Math.min(100, Math.max(22, (v / 300) * 100));
+  }
+  // loss 0–15% → ~20%–100%
+  return Math.min(100, Math.max(20, (v / 15) * 100));
+}
+
 function Spark({ label, display, metric, bars }: {
   label: string; display: string; metric: "latency" | "loss";
   bars: Array<{ time: string; latency: number | null; loss: number | null }>;
@@ -71,10 +88,22 @@ function Spark({ label, display, metric, bars }: {
         <span className="card-row__label">{label}</span>
         <span className="card-row__value mono">{display}</span>
       </div>
-      <div className="card-spark__track" style={{ gridTemplateColumns: `repeat(${bars.length}, minmax(0, 1fr))` }} aria-hidden>
+      <div
+        className="card-spark__track"
+        style={{
+          gridTemplateColumns: `repeat(${Math.max(bars.length, 1)}, minmax(0, 1fr))`,
+        }}
+        aria-hidden
+      >
         {bars.map((p, i) => {
           const v = metric === "latency" ? p.latency : p.loss;
-          return <span key={`${p.time}-${i}`} className={`card-spark__cell ${barToneClass(metric, v)}`} />;
+          return (
+            <span
+              key={`${p.time}-${i}`}
+              className={`card-spark__cell ${barToneClass(metric, v)}`}
+              style={{ height: `${sparkHeightPct(metric, v)}%` }}
+            />
+          );
         })}
       </div>
     </div>
@@ -88,8 +117,15 @@ function StatGroup({ node, online, metrics, showUptime }: NodeCardProps) {
   const cpu = metrics?.cpu.usage ?? 0;
   const ram = metrics ? percentOf(metrics.ram.used, metrics.ram.total) : 0;
   const disk = metrics ? percentOf(metrics.disk.used, metrics.disk.total) : 0;
-  const trafficUsed = metrics ? Math.max(metrics.network.totalUp, metrics.network.totalDown) : 0;
-  const trafficPct = node.traffic_limit > 0 ? percentOf(trafficUsed, node.traffic_limit) : 0;
+  const trafficUsed = metrics
+    ? trafficUsedBytes(
+        metrics.network.totalUp,
+        metrics.network.totalDown,
+        node.traffic_limit_type,
+      )
+    : 0;
+  const trafficPct =
+    node.traffic_limit > 0 ? percentOf(trafficUsed, node.traffic_limit) : 0;
   const price =
     node.price < 0
       ? t("detail.free")
@@ -160,12 +196,8 @@ function SectionPing({ metrics }: { metrics?: RealtimeMetrics }) {
   );
 }
 
-export const NodeCard = memo(function NodeCard({
-  node,
-  online,
-  metrics,
-  showUptime,
-}: NodeCardProps) {
+export const NodeCard = memo(
+  function NodeCard({ node, online, metrics, showUptime }: NodeCardProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const os = useMemo(() => getOsIcon(node.os), [node.os]);
@@ -174,11 +206,9 @@ export const NodeCard = memo(function NodeCard({
     [node.arch, node.cpu_name],
   );
   const tags = useMemo(() => parseTags(node.tags), [node.tags]);
-  const virt = useMemo(
+  const virtMeta = useMemo(
     () =>
-      node.virtualization
-        ? getVirtIcon(node.virtualization).icon
-        : null,
+      node.virtualization ? getVirtIcon(node.virtualization) : null,
     [node.virtualization],
   );
 
@@ -193,7 +223,9 @@ export const NodeCard = memo(function NodeCard({
     >
       <div className="node-card__head">
         <div className="node-card__head-left">
-          {virt ? <QuickIcon icon={virt} size={14} /> : null}
+          {virtMeta ? (
+            <QuickIcon icon={virtMeta.icon} size={16} title={virtMeta.label} />
+          ) : null}
           <h3 className="node-card__title" title={node.name}>
             <RegionFlag region={node.region} className="node-card__flag" />
             {node.name}
@@ -213,8 +245,8 @@ export const NodeCard = memo(function NodeCard({
           </Tag>
         ) : null}
         <div className="node-card__badges">
-          <QuickIcon icon={os.icon} size={16} />
-          <QuickIcon icon={arch.icon} size={18} />
+          <QuickIcon icon={os.icon} size={18} title={os.label} />
+          <QuickIcon icon={arch.icon} size={18} title={arch.label} />
         </div>
         <span className="node-card__cpu mono">{node.cpu_name}</span>
       </div>
@@ -237,4 +269,10 @@ export const NodeCard = memo(function NodeCard({
       )}
     </ClickableTile>
   );
-});
+  },
+  (prev, next) =>
+    prev.online === next.online &&
+    prev.showUptime === next.showUptime &&
+    prev.node === next.node &&
+    prev.metrics === next.metrics,
+);

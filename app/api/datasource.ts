@@ -7,6 +7,7 @@ import type {
 } from "~/types/komari";
 import {
   getRpc,
+  normalizeRecordList,
   rpcGetLoadRecords,
   rpcGetNodeRecentStatus,
   rpcGetNodes,
@@ -20,6 +21,7 @@ import {
   mapStatusToMetrics,
   mapStatusesToSnapshot,
 } from "~/api/mappers";
+import type { LoadRecord, PingHistoryRecord, PingTaskMeta } from "~/types/komari";
 
 function apiRoot(): string {
   const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
@@ -59,8 +61,45 @@ async function restLoadRecords(
     { credentials: "include", signal },
   );
   if (!res.ok) throw new Error(`load records ${res.status}`);
-  const json = (await res.json()) as { data: LoadRecordsResponse };
-  return json.data;
+  const json = (await res.json()) as {
+    data: {
+      count?: number;
+      has_gpu_data?: boolean;
+      records?: LoadRecord[] | Record<string, LoadRecord[]>;
+    };
+  };
+  const raw = json.data?.records;
+  const list = normalizeRecordList(raw, uuid);
+  return {
+    count: json.data?.count ?? list.length,
+    has_gpu_data: json.data?.has_gpu_data,
+    records: list.map(mapStatusRecordToLoad),
+  };
+}
+
+async function restPingRecords(
+  uuid: string,
+  hours: number,
+  signal?: AbortSignal,
+): Promise<PingHistoryResponse> {
+  const res = await fetch(
+    `${apiRoot()}/records/ping?uuid=${encodeURIComponent(uuid)}&hours=${hours}`,
+    { credentials: "include", signal },
+  );
+  if (!res.ok) return { count: 0, records: [], tasks: [] };
+  const json = (await res.json()) as {
+    data: {
+      count?: number;
+      records?: PingHistoryRecord[] | Record<string, PingHistoryRecord[]>;
+      tasks?: PingTaskMeta[];
+    };
+  };
+  const list = normalizeRecordList(json.data?.records, uuid);
+  return {
+    count: json.data?.count ?? list.length,
+    records: list,
+    tasks: json.data?.tasks ?? [],
+  };
 }
 
 function createRpcDataSource(): KomariDataSource {
@@ -136,17 +175,7 @@ function createRpcDataSource(): KomariDataSource {
       } catch (e) {
         if (signal?.aborted) throw e;
         try {
-          const res = await fetch(
-            `${apiRoot()}/records/ping?uuid=${encodeURIComponent(uuid)}&hours=${hours}`,
-            { credentials: "include", signal },
-          );
-          if (!res.ok) return { count: 0, records: [], tasks: [] };
-          const json = (await res.json()) as { data: PingHistoryResponse };
-          return {
-            count: json.data.count ?? 0,
-            records: json.data.records ?? [],
-            tasks: json.data.tasks ?? [],
-          };
+          return await restPingRecords(uuid, hours, signal);
         } catch (err) {
           if (signal?.aborted) throw err;
           return { count: 0, records: [], tasks: [] };
@@ -168,9 +197,10 @@ function createRpcDataSource(): KomariDataSource {
       );
       let failCount = 0;
 
-      const forceWs =
-        (import.meta.env.VITE_RPC_WS as string | undefined) === "true";
-      rpc.setTransport(forceWs);
+      // Only override transport when env is explicit; else keep bootstrap choice
+      const envWs = import.meta.env.VITE_RPC_WS as string | undefined;
+      if (envWs === "true") rpc.setTransport(true);
+      else if (envWs === "false") rpc.setTransport(false);
 
       let inFlight = false;
       const tick = async () => {

@@ -1,6 +1,6 @@
 import { IconButton, Tile } from "@carbon/react";
 import { Reset } from "@carbon/icons-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
@@ -55,6 +55,15 @@ export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
     coordinates: DEFAULT_CENTER,
     zoom: DEFAULT_ZOOM,
   });
+
+  useEffect(() => {
+    if (!hover) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setHover(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [hover]);
 
   // Sync region centroids — no async geo / name parsing
   const points = useMemo(() => resolveNodeMapPoints(nodes), [nodes]);
@@ -145,6 +154,10 @@ export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
             {markers.map((m) => {
               const clusterOnline = m.onlineCount > 0;
               const active = hover?.key === m.key;
+              const label =
+                m.count === 1
+                  ? m.name
+                  : t("map.nodesAt", { count: m.count });
               return (
                 <Marker key={m.key} coordinates={[m.lon, m.lat]}>
                   <g
@@ -153,12 +166,40 @@ export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
                         ? "node-map__marker is-on"
                         : "node-map__marker is-off"
                     }
+                    role="button"
+                    tabIndex={0}
+                    aria-label={label}
+                    aria-expanded={active}
                     onMouseEnter={() => setHover(m)}
-                    onMouseLeave={() => setHover(null)}
+                    onFocus={() => setHover(m)}
+                    onBlur={() => {
+                      // Delay so focus can move into panel buttons
+                      window.setTimeout(() => {
+                        const ae = document.activeElement;
+                        if (
+                          ae &&
+                          ae.closest?.(".node-map__panel, .node-map__marker")
+                        ) {
+                          return;
+                        }
+                        setHover((prev) => (prev?.key === m.key ? null : prev));
+                      }, 0);
+                    }}
                     onClick={() => {
                       if (m.count === 1) navigate(`/node/${m.uuid}`);
+                      else setHover((prev) => (prev?.key === m.key ? null : m));
                     }}
-                    style={{ cursor: m.count === 1 ? "pointer" : "default" }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        if (m.count === 1) navigate(`/node/${m.uuid}`);
+                        else
+                          setHover((prev) =>
+                            prev?.key === m.key ? null : m,
+                          );
+                      }
+                    }}
+                    style={{ cursor: "pointer" }}
                   >
                     <circle
                       r={active ? 7 : m.count > 1 ? 6 : 4.5}
@@ -185,6 +226,12 @@ export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
         {hover ? (
           <div
             className="node-map__panel"
+            role="dialog"
+            aria-label={
+              hover.count > 1
+                ? t("map.nodesAt", { count: hover.count })
+                : hover.name
+            }
             onMouseEnter={() => setHover(hover)}
             onMouseLeave={() => setHover(null)}
           >
@@ -205,6 +252,7 @@ export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
                     key={mem.uuid}
                     type="button"
                     className={`node-map__card${on ? " is-on" : " is-off"}`}
+                    aria-label={t("map.openNode")}
                     onClick={() => navigate(`/node/${mem.uuid}`)}
                   >
                     <span

@@ -310,7 +310,7 @@ export default function Home() {
                 labelText={t("app.search")}
                 placeholder={t("app.search")}
                 value={search}
-                closeButtonLabelText={t("app.search")}
+                closeButtonLabelText={t("app.clearSearch")}
                 onChange={(e) => setSearch(e.target.value)}
                 onClear={() => setSearch("")}
                 ref={searchInputRef}

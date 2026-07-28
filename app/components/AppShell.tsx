@@ -15,7 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet } from "react-router";
-import { setLanguage } from "~/i18n";
+import { setLanguage, syncHtmlLang } from "~/i18n";
 import type { Appearance } from "~/types/komari";
 import { initAppearance, useAppearanceStore } from "~/stores/appearance";
 import { useNodesStore } from "~/stores/nodes";
@@ -34,8 +34,11 @@ export function AppShell() {
   const teardown = useNodesStore((s) => s.teardown);
   const [faviconOk, setFaviconOk] = useState(true);
 
+  const density = useNodesStore((s) => s.density);
+
   useEffect(() => {
     initAppearance();
+    syncHtmlLang();
   }, []);
 
   useEffect(() => {
@@ -48,6 +51,10 @@ export function AppShell() {
     document.documentElement.style.colorScheme =
       carbonTheme === "g100" ? "dark" : "light";
   }, [carbonTheme]);
+
+  useEffect(() => {
+    document.documentElement.dataset.density = density;
+  }, [density]);
 
   const siteName = publicSettings?.sitename?.trim() || "Komari Monitor";
   const isZh = i18n.language.startsWith("zh");
@@ -134,7 +141,7 @@ export function AppShell() {
           <footer className="app-footer">
             <div className="container app-footer__row row-between">
               <span>
-                Powered by{" "}
+                {t("app.poweredByPrefix")}{" "}
                 <a
                   href="https://github.com/komari-monitor/komari"
                   target="_blank"

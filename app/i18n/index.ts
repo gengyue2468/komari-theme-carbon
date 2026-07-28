@@ -25,11 +25,15 @@ void i18n.use(initReactI18next).init({
   lng: detectLanguage(),
   fallbackLng: "en",
   interpolation: { escapeValue: false },
-}).then(() => {
-  syncDocumentLang(i18n.language);
 });
 
+// Do not touch document.lang during module init (causes hydration mismatch).
+// AppShell calls syncHtmlLang after mount; languageChanged keeps it updated.
 i18n.on("languageChanged", syncDocumentLang);
+
+export function syncHtmlLang() {
+  syncDocumentLang(i18n.language);
+}
 
 export function setLanguage(lng: "en" | "zh-CN") {
   localStorage.setItem(STORAGE_KEY, lng);

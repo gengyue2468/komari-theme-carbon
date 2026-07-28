@@ -35,20 +35,31 @@ const RANGES: Array<{ key: RangeKey; hours: number }> = [
   { key: "1d", hours: 24 },
 ];
 
-export function PingChart({ uuid }: PingChartProps) {
+export function PingChart({ uuid, online }: PingChartProps) {
   const { t } = useTranslation();
   const carbonTheme = useAppearanceStore((s) => s.carbonTheme);
   const theme = carbonTheme === "g100" ? "g100" : "g10";
   const preserve = useNodesStore(
     (s) => s.publicSettings?.ping_record_preserve_time ?? 48,
   );
+  const chartHours = useNodesStore((s) => s.chartHours);
 
   const availableRanges = useMemo(
     () => RANGES.filter((r) => r.hours <= Math.max(preserve, 1)),
     [preserve],
   );
 
-  const [range, setRange] = useState<RangeKey>("1h");
+  const initialRange = useMemo((): RangeKey => {
+    const h = chartHours;
+    const pick = (k: RangeKey) =>
+      availableRanges.some((r) => r.key === k) ? k : null;
+    if (h <= 1) return pick("1h") ?? availableRanges[0]?.key ?? "1h";
+    if (h <= 6) return pick("6h") ?? pick("1h") ?? "1h";
+    if (h <= 12) return pick("12h") ?? pick("6h") ?? "1h";
+    return pick("1d") ?? pick("12h") ?? pick("6h") ?? "1h";
+  }, [chartHours, availableRanges]);
+
+  const [range, setRange] = useState<RangeKey>(initialRange);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectionReady, setSelectionReady] = useState(false);
 
@@ -169,6 +180,9 @@ export function PingChart({ uuid }: PingChartProps) {
 
   return (
     <div className="ping-chart-panel">
+      {!online ? (
+        <p className="ping-chart-panel__offline mono">{t("detail.offlineHint")}</p>
+      ) : null}
       <div className="ping-chart-panel__toolbar">
         <div className="ping-chart-panel__tabs">
           <Tabs
@@ -240,7 +254,8 @@ export function PingChart({ uuid }: PingChartProps) {
                   </div>
                   <div className="ping-task-card__stats mono">
                     <span>
-                      avg {task.avg != null ? `${task.avg} ms` : "—"}
+                      {t("detail.avg")}{" "}
+                      {task.avg != null ? `${task.avg} ms` : "—"}
                     </span>
                     <span>
                       {t("metrics.loss")} {task.lossPct.toFixed(1)}%

@@ -16,6 +16,7 @@ import {
   formatRate,
   percentOf,
 } from "~/lib/format";
+import { COLOR_DOWN, COLOR_UP } from "~/lib/ping-tone";
 import { queryKeys } from "~/lib/query-client";
 import { useAppearanceStore } from "~/stores/appearance";
 import { useNodesStore } from "~/stores/nodes";
@@ -81,11 +82,10 @@ function baseChartOptions(
     legend: { enabled: false },
     grid: { x: { enabled: false }, y: { enabled: true } },
     points: { enabled: false, radius: 0 },
+    // Only keys that exist in data.group — extra keys spam console warnings
     color: {
       scale: {
         primary: "var(--cds-interactive)",
-        secondary: "var(--cds-support-info)",
-        tertiary: "var(--cds-support-warning)",
       },
     },
   };
@@ -130,12 +130,27 @@ export function LoadChart({ uuid }: LoadChartProps) {
   const preserve = useNodesStore(
     (s) => s.publicSettings?.record_preserve_time ?? 24,
   );
+  // History load records always ship ram_total/disk_total = 0; use node totals.
+  const node = useNodesStore((s) => s.nodes.find((n) => n.uuid === uuid));
+  const ramTotalFallback = node?.mem_total ?? 0;
+  const diskTotalFallback = node?.disk_total ?? 0;
+  const swapTotalFallback = node?.swap_total ?? 0;
+  const chartHours = useNodesStore((s) => s.chartHours);
   const availableRanges = useMemo(
     () => filterLoadRanges(preserve),
     [preserve],
   );
 
-  const [range, setRange] = useState<RangeKey>("live");
+  const initialRange = useMemo((): RangeKey => {
+    const h = chartHours;
+    if (h <= 1) return "live";
+    if (h <= 4) return availableRanges.some((r) => r.key === "4h") ? "4h" : "live";
+    if (availableRanges.some((r) => r.key === "1d")) return "1d";
+    if (availableRanges.some((r) => r.key === "4h")) return "4h";
+    return "live";
+  }, [chartHours, availableRanges]);
+
+  const [range, setRange] = useState<RangeKey>(initialRange);
   const pollMs = useNodesStore((s) => s.pollIntervalMs);
 
   const hours =
@@ -164,9 +179,10 @@ export function LoadChart({ uuid }: LoadChartProps) {
       );
       return isLive ? list.slice(-120) : list;
     },
-    staleTime: 0,
+    staleTime: isLive ? Math.max(pollMs || 3000, 2000) : 0,
     gcTime: 60_000,
-    refetchInterval: isLive ? pollMs || 3000 : false,
+    // Live: don't thrash full 1h fetch harder than ~5s
+    refetchInterval: isLive ? Math.max(pollMs || 3000, 5000) : false,
     // No placeholderData: tab switch must clear old series and show spinner
   });
 
@@ -178,14 +194,26 @@ export function LoadChart({ uuid }: LoadChartProps) {
     (!isLive && loadQuery.isFetching) ||
     (isLive && !loadQuery.data);
 
-  const series = useMemo(
-    () => downsample(records, isLive ? 90 : 120),
-    [records, isLive],
-  );
+  const series = useMemo(() => {
+    const down = downsample(records, isLive ? 90 : 120);
+    // Komari history records leave *_total as 0; fill from node info.
+    return down.map((r) => ({
+      ...r,
+      ram_total: r.ram_total || ramTotalFallback,
+      disk_total: r.disk_total || diskTotalFallback,
+      swap_total: r.swap_total || swapTotalFallback,
+    }));
+  }, [
+    records,
+    isLive,
+    ramTotalFallback,
+    diskTotalFallback,
+    swapTotalFallback,
+  ]);
   const latest = series[series.length - 1];
 
-  const pctOpts = useMemo(
-    () => baseChartOptions(theme, [0, 100], "%"),
+  const pctAreaOpts = useMemo<AreaChartOptions>(
+    () => ({ ...baseChartOptions(theme, [0, 100], "%") }),
     [theme],
   );
 
@@ -259,7 +287,23 @@ export function LoadChart({ uuid }: LoadChartProps) {
 
   const netOpts = useMemo<LineChartOptions>(
     () => ({
-      ...baseChartOptions(theme, undefined, "B/s"),
+      ...baseChartOptions(theme),
+      axes: {
+        bottom: {
+          mapsTo: "date",
+          scaleType: ScaleTypes.TIME,
+          ticks: { number: 8 },
+        },
+        left: {
+          mapsTo: "value",
+          scaleType: ScaleTypes.LINEAR,
+          includeZero: true,
+          ticks: {
+            formatter: (tick: number | Date) =>
+              `${formatRate(Number(tick))}`,
+          },
+        },
+      },
       legend: {
         enabled: true,
         alignment: Alignments.CENTER,
@@ -268,8 +312,8 @@ export function LoadChart({ uuid }: LoadChartProps) {
       height: "200px",
       color: {
         scale: {
-          [t("metrics.upload")]: "var(--cds-interactive)",
-          [t("metrics.download")]: "var(--cds-support-info)",
+          [t("metrics.upload")]: COLOR_UP,
+          [t("metrics.download")]: COLOR_DOWN,
         },
       },
     }),
@@ -279,6 +323,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
   const connOpts = useMemo<LineChartOptions>(
     () => ({
       ...baseChartOptions(theme),
+      height: "200px",
       legend: {
         enabled: true,
         alignment: Alignments.CENTER,
@@ -286,8 +331,8 @@ export function LoadChart({ uuid }: LoadChartProps) {
       },
       color: {
         scale: {
-          TCP: "var(--cds-interactive)",
-          UDP: "var(--cds-support-info)",
+          TCP: COLOR_UP,
+          UDP: COLOR_DOWN,
         },
       },
     }),
@@ -349,7 +394,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
             title={t("metrics.cpu")}
             meta={latest ? `${latest.cpu.toFixed(1)}%` : undefined}
             data={cpuData}
-            options={pctOpts}
+            options={pctAreaOpts}
             kind="area"
           />
           <MetricChart
@@ -360,7 +405,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
                 : undefined
             }
             data={ramData}
-            options={pctOpts}
+            options={pctAreaOpts}
             kind="area"
           />
           <MetricChart
@@ -371,7 +416,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
                 : undefined
             }
             data={diskData}
-            options={pctOpts}
+            options={pctAreaOpts}
             kind="area"
           />
           <MetricChart

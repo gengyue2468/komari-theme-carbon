@@ -1,11 +1,17 @@
+/** Distinct hues: blue / purple / amber / violet / orange / magenta */
 export const PING_TASK_COLORS = [
   "var(--cds-interactive)",
-  "var(--cds-support-info)",
-  "var(--cds-support-warning)",
   "#8a3ffc",
+  "var(--cds-support-warning)",
+  "#6929c4",
   "#ff832b",
   "#ee5396",
 ] as const;
+
+/** Upload / primary series */
+export const COLOR_UP = "var(--cds-interactive)";
+/** Download / secondary — purple, not near-blue support-info */
+export const COLOR_DOWN = "#8a3ffc";
 
 export function latencyToneClass(ms: number): string {
   if (ms <= 60) return "ping-tone--good";

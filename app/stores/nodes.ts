@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { dataSource } from "~/api/datasource";
 import { getRpc } from "~/api/rpc";
+import { asNumber } from "~/lib/format";
 import type {
   NodeInfo,
   PublicSettings,
@@ -9,6 +10,8 @@ import type {
 } from "~/types/komari";
 
 const VIEW_KEY = "nodeViewMode";
+
+export type DensityMode = "comfortable" | "compact";
 
 function readViewMode(fallback: ViewMode): ViewMode {
   if (typeof window === "undefined") return fallback;
@@ -24,6 +27,11 @@ function resolveDefaultView(settings: Record<string, unknown>): ViewMode {
   if (v === "table" || v === "list") return "table";
   if (v === "grid" || v === "card") return "grid";
   return "grid";
+}
+
+function resolveDensity(settings: Record<string, unknown>): DensityMode {
+  const v = String(settings.density ?? "comfortable").toLowerCase();
+  return v === "compact" ? "compact" : "comfortable";
 }
 
 function nodesFingerprint(nodes: NodeInfo[]): string {
@@ -47,6 +55,7 @@ interface NodesState {
   viewMode: ViewMode;
   showUptime: boolean;
   chartHours: number;
+  density: DensityMode;
   pollIntervalMs: number;
   unsubscribe: (() => void) | null;
   bootstrap: () => Promise<void>;
@@ -68,6 +77,7 @@ export const useNodesStore = create<NodesState>((set, get) => ({
   viewMode: "grid",
   showUptime: true,
   chartHours: 4,
+  density: "comfortable",
   pollIntervalMs: 3000,
   unsubscribe: null,
 
@@ -89,19 +99,15 @@ export const useNodesStore = create<NodesState>((set, get) => ({
       if (mode === "http" || import.meta.env.DEV) getRpc().setTransport(false);
       else if (mode === "websocket") getRpc().setTransport(true);
 
-      const intervalRaw = settings.dataUpdateInterval;
       const pollIntervalMs =
-        typeof intervalRaw === "number"
-          ? Math.min(60, Math.max(1, intervalRaw)) * 1000
-          : 3000;
+        asNumber(settings.dataUpdateInterval, 3, 1, 60) * 1000;
 
       const defaultView = resolveDefaultView(settings);
       const viewMode = readViewMode(defaultView);
-      const showUptime = settings.showUptime !== false;
-      const chartHours =
-        typeof settings.defaultChartHours === "number"
-          ? settings.defaultChartHours
-          : 4;
+      const showUptime =
+        settings.showUptime !== false && settings.showUptime !== "false";
+      const chartHours = asNumber(settings.defaultChartHours, 4, 1, 168);
+      const density = resolveDensity(settings);
 
       get().unsubscribe?.();
 
@@ -112,6 +118,7 @@ export const useNodesStore = create<NodesState>((set, get) => ({
         viewMode,
         showUptime,
         chartHours,
+        density,
         pollIntervalMs,
         loading: false,
       });

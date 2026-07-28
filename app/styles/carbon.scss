@@ -437,9 +437,9 @@ body {
 
 
 
-/* Ocean = layer-01; land = soft interactive blue tint */
+/* Ocean = layer-01; land = stronger blue tint for contrast */
 .node-map__land {
-  fill: color-mix(in srgb, $interactive 18%, $layer-02);
+  fill: color-mix(in srgb, $interactive 26%, $layer-02);
   stroke: $layer-01;
   stroke-width: 0.55;
   outline: none;
@@ -448,12 +448,12 @@ body {
 }
 
 .node-map__land:hover {
-  fill: color-mix(in srgb, $interactive 32%, $layer-02);
+  fill: color-mix(in srgb, $interactive 38%, $layer-02);
 }
 
 .node-map__land.is-active {
-  fill: color-mix(in srgb, $interactive 42%, $layer-02);
-  stroke: color-mix(in srgb, $interactive 55%, $border-subtle-01);
+  fill: color-mix(in srgb, $interactive 48%, $layer-02);
+  stroke: color-mix(in srgb, $interactive 60%, $border-subtle-01);
   stroke-width: 0.7;
 }
 
@@ -845,9 +845,31 @@ body {
 .node-card__badges {
   display: inline-flex;
   align-items: center;
-  gap: $spacing-02;
-  color: $icon-secondary;
+  gap: $spacing-03;
+  color: $icon-primary;
   flex-shrink: 0;
+}
+
+/* Fixed viewport so AMD/Intel/OS marks share optical size */
+.brand-icon {
+  color: inherit;
+}
+
+.brand-icon__glyph {
+  display: block;
+  flex-shrink: 0;
+  /* Iconify SVGs sometimes paint smaller than box */
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.node-card__head-left .brand-icon,
+.node-card__badges .brand-icon {
+  color: $icon-primary;
+}
+
+.table-icon-cell .brand-icon {
+  color: $icon-primary;
 }
 
 .node-card__cpu {
@@ -988,7 +1010,12 @@ body {
 
 .card-rate__up { color: $interactive; }
 
-.card-rate__down { color: $support-info; }
+/* Purple — distinct from interactive blue (was support-info, too close) */
+.card-rate__down { color: #8a3ffc; }
+
+html[data-carbon-theme="g100"] .card-rate__down {
+  color: #a56eff;
+}
 
 /* --- ISP row --- */
 
@@ -1029,15 +1056,17 @@ body {
 .card-spark__track {
   display: grid;
   align-items: end;
-  gap: 1px;
-  height: 0.625rem;
+  gap: 2px;
+  height: 1.25rem;
 }
 
 .card-spark__cell {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 0.2rem;
+  min-height: 0.25rem;
+  align-self: end;
+  border-radius: 1px;
   background: $layer-accent-01;
 }
 
@@ -1109,6 +1138,8 @@ body {
   justify-content: center;
   vertical-align: middle;
   line-height: 0;
+  min-width: 1.25rem;
+  min-height: 1.25rem;
 }
 
 /* Cell content helpers (not layout/width hacks) */
@@ -1221,7 +1252,11 @@ body {
 }
 
 .table-rate__down {
-  color: $support-info;
+  color: #8a3ffc;
+}
+
+html[data-carbon-theme="g100"] .table-rate__down {
+  color: #a56eff;
 }
 
 /* ── Detail page (Emerald layout, Carbon style) ── */
@@ -1457,7 +1492,11 @@ body {
   display: inline-flex;
   align-items: center;
   gap: $spacing-02;
-  color: $support-info;
+  color: #8a3ffc;
+}
+
+html[data-carbon-theme="g100"] .rate-pair__down {
+  color: #a56eff;
 }
 
 .chart-panel {
@@ -1931,4 +1970,53 @@ body {
     gap: $spacing-02;
     text-align: center;
   }
+}
+
+/* Managed density=compact */
+html[data-density="compact"] {
+  --container-pad: #{$spacing-04};
+
+  .node-card.cds--tile {
+    padding: $spacing-04;
+  }
+
+  .node-grid {
+    gap: $spacing-04;
+  }
+
+  .home-stat-grid {
+    gap: $spacing-03;
+  }
+
+  .load-chart-grid {
+    gap: $spacing-04;
+  }
+
+  .detail-metric-grid {
+    gap: $spacing-03;
+  }
+
+  .cds--data-table td {
+    padding-block: $spacing-03;
+  }
+
+  .node-map.cds--tile {
+    min-height: 14rem;
+  }
+}
+
+.node-map__marker:focus {
+  outline: 2px solid $focus;
+  outline-offset: 2px;
+}
+
+.table-row-clickable:focus {
+  outline: 2px solid $focus;
+  outline-offset: -2px;
+}
+
+.ping-chart-panel__offline {
+  margin: 0 0 $spacing-03;
+  @include type-style("helper-text-01");
+  color: $text-secondary;
 }

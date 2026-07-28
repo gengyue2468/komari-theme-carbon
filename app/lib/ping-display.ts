@@ -26,26 +26,28 @@ export function networksFromLivePing(
   }));
 }
 
+const SPARK_SLOTS = 12;
+
+/**
+ * Card spark: real live task latency/loss only (no synthetic oscillation).
+ * Tiles task values across ~12 slots so the strip stays visually dense.
+ */
 export function sparkFromLivePing(
   ping?: Record<string, NodePingLive>,
 ): PingSparkPoint[] {
-  // Live status has no history; synthesize flat bars from latest for card spark
   const nets = networksFromLivePing(ping);
-  if (nets.length === 0) {
-    return Array.from({ length: 12 }, (_, i) => ({
-      time: String(i),
-      latency: null,
-      loss: null,
-    }));
+  if (nets.length === 0) return [];
+  const slots = Math.max(SPARK_SLOTS, nets.length);
+  const out: PingSparkPoint[] = [];
+  for (let i = 0; i < slots; i++) {
+    const n = nets[i % nets.length];
+    out.push({
+      time: `${n.name || i}-${i}`,
+      latency: n.latencyMs,
+      loss: n.lossPct ?? null,
+    });
   }
-  const avg =
-    nets.reduce((s, n) => s + (n.latencyMs ?? 0), 0) /
-    Math.max(1, nets.filter((n) => n.latencyMs != null).length);
-  return Array.from({ length: 12 }, (_, i) => ({
-    time: String(i),
-    latency: avg > 0 ? Math.round(avg + (i % 3) * 2) : null,
-    loss: nets[0]?.lossPct ?? 0,
-  }));
+  return out;
 }
 
 export function cardPingFromMetrics(metrics?: RealtimeMetrics): {

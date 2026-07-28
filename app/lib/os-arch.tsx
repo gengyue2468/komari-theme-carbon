@@ -12,16 +12,37 @@ export function getArchIcon(arch: string, cpuName = ""): { icon: IconRef; label:
   const cpu = cpuName.trim().toLowerCase();
   const label = [cpuName.trim(), arch.trim()].filter(Boolean).join(" · ") || "CPU";
 
-  if (cpu.includes("amd") || cpu.includes("epyc") || cpu.includes("ryzen") || cpu.includes("threadripper") || cpu.includes("athlon"))
+  // Prefer simple-icons set for consistent stroke/fill weight
+  if (
+    cpu.includes("amd") ||
+    cpu.includes("epyc") ||
+    cpu.includes("ryzen") ||
+    cpu.includes("threadripper") ||
+    cpu.includes("athlon")
+  )
     return { icon: { kind: "iconify", id: "simple-icons:amd" }, label };
-  if (cpu.includes("intel") || cpu.includes("xeon") || cpu.includes("core i") || cpu.includes("core(tm)") || cpu.includes("celeron") || cpu.includes("pentium"))
-    return { icon: { kind: "iconify", id: "cib:intel" }, label };
-  if (cpu.includes("arm") || cpu.includes("cortex") || cpu.includes("neoverse") || cpu.includes("apple m") || a.includes("arm") || a.includes("aarch"))
-    return { icon: { kind: "iconify", id: "file-icons:arm" }, label };
+  if (
+    cpu.includes("intel") ||
+    cpu.includes("xeon") ||
+    cpu.includes("core i") ||
+    cpu.includes("core(tm)") ||
+    cpu.includes("celeron") ||
+    cpu.includes("pentium")
+  )
+    return { icon: { kind: "iconify", id: "simple-icons:intel" }, label };
+  if (
+    cpu.includes("arm") ||
+    cpu.includes("cortex") ||
+    cpu.includes("neoverse") ||
+    cpu.includes("apple m") ||
+    a.includes("arm") ||
+    a.includes("aarch")
+  )
+    return { icon: { kind: "iconify", id: "simple-icons:arm" }, label };
   if (a.includes("amd64") || a.includes("x86_64") || a.includes("x64"))
     return { icon: { kind: "iconify", id: "simple-icons:amd" }, label };
   if (a.includes("i386") || a.includes("i686") || a === "x86")
-    return { icon: { kind: "iconify", id: "cib:intel" }, label };
+    return { icon: { kind: "iconify", id: "simple-icons:intel" }, label };
 
   return { icon: { kind: "carbon", Icon: Chip }, label };
 }

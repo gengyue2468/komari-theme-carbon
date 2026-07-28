@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ArrowUp,
   Calendar,
-  Chip,
   Currency,
   DataBase,
   Time,
@@ -25,6 +24,7 @@ import {
   isNeverExpire,
   parseTags,
   percentOf,
+  trafficUsedBytes,
 } from "~/lib/format";
 import { nodeFinance } from "~/lib/home-stats";
 import { getArchIcon, getOsIcon, getVirtIcon } from "~/lib/os-arch";
@@ -84,7 +84,11 @@ export default function NodeDetail() {
   const virt = getVirtIcon(node.virtualization);
 
   const trafficUsed = metrics
-    ? Math.max(metrics.network.totalUp, metrics.network.totalDown)
+    ? trafficUsedBytes(
+        metrics.network.totalUp,
+        metrics.network.totalDown,
+        node.traffic_limit_type,
+      )
     : 0;
   const hasLimit = node.traffic_limit > 0;
   const trafficPct = hasLimit ? percentOf(trafficUsed, node.traffic_limit) : 0;
@@ -135,21 +139,68 @@ export default function NodeDetail() {
   ];
 
   const hardwareItems = [
-    { label: t("metrics.cpu"), value: `${node.cpu_name} (×${node.cpu_cores})`, icon: <Chip size={14} />, wide: true },
-    { label: t("detail.arch"), value: node.arch, icon: <QuickIcon icon={arch.icon} size={14} /> },
-    { label: t("detail.virt"), value: node.virtualization || "—", icon: <QuickIcon icon={virt.icon} size={14} /> },
-    { label: t("metrics.gpu"), value: node.gpu_name && node.gpu_name !== "None" ? node.gpu_name : "—", icon: <Video size={14} /> },
+    {
+      label: t("metrics.cpu"),
+      value: `${node.cpu_name} (×${node.cpu_cores})`,
+      icon: <QuickIcon icon={arch.icon} size={16} title={arch.label} />,
+      wide: true,
+    },
+    {
+      label: t("detail.arch"),
+      value: node.arch,
+      icon: <QuickIcon icon={arch.icon} size={16} title={arch.label} />,
+    },
+    {
+      label: t("detail.virt"),
+      value: node.virtualization || "—",
+      icon: <QuickIcon icon={virt.icon} size={16} title={virt.label} />,
+    },
+    {
+      label: t("metrics.gpu"),
+      value: node.gpu_name && node.gpu_name !== "None" ? node.gpu_name : "—",
+      icon: <Video size={16} />,
+    },
   ];
   const systemItems = [
-    { label: t("detail.os"), value: node.os, icon: <QuickIcon icon={os.icon} size={14} /> },
-    { label: t("detail.kernel"), value: node.kernel_version, icon: <Application size={14} /> },
-    { label: t("metrics.uptime"), value: formatUptime(metrics?.uptime ?? 0), icon: <Time size={14} /> },
-    { label: t("detail.lastSeen"), value: metrics?.updated_at ? new Date(metrics.updated_at).toLocaleString() : "—", icon: <Time size={14} /> },
+    {
+      label: t("detail.os"),
+      value: node.os,
+      icon: <QuickIcon icon={os.icon} size={16} title={os.label} />,
+    },
+    {
+      label: t("detail.kernel"),
+      value: node.kernel_version,
+      icon: <Application size={16} />,
+    },
+    {
+      label: t("metrics.uptime"),
+      value: formatUptime(metrics?.uptime ?? 0),
+      icon: <Time size={16} />,
+    },
+    {
+      label: t("detail.lastSeen"),
+      value: metrics?.updated_at
+        ? new Date(metrics.updated_at).toLocaleString()
+        : "—",
+      icon: <Time size={16} />,
+    },
   ];
   const storageItems = [
-    { label: t("metrics.ram"), value: formatBytes(node.mem_total), icon: <DataBase size={14} /> },
-    { label: t("detail.swap"), value: formatBytes(node.swap_total), icon: <DataBase size={14} /> },
-    { label: t("metrics.disk"), value: formatBytes(node.disk_total), icon: <DataBase size={14} /> },
+    {
+      label: t("metrics.ram"),
+      value: formatBytes(node.mem_total),
+      icon: <DataBase size={16} />,
+    },
+    {
+      label: t("detail.swap"),
+      value: formatBytes(node.swap_total),
+      icon: <DataBase size={16} />,
+    },
+    {
+      label: t("metrics.disk"),
+      value: formatBytes(node.disk_total),
+      icon: <DataBase size={16} />,
+    },
   ];
 
   return (

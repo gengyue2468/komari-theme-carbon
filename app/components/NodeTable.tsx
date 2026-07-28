@@ -21,6 +21,7 @@ import {
   formatUptime,
   parseTags,
   percentOf,
+  trafficUsedBytes,
 } from "~/lib/format";
 import { getArchIcon, getOsIcon } from "~/lib/os-arch";
 import { cardPingFromMetrics } from "~/lib/ping-display";
@@ -87,7 +88,13 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
         const cpu = m?.cpu.usage ?? 0;
         const ramPct = m ? percentOf(m.ram.used, m.ram.total) : 0;
         const diskPct = m ? percentOf(m.disk.used, m.disk.total) : 0;
-        const tUsed = m ? Math.max(m.network.totalUp, m.network.totalDown) : 0;
+        const tUsed = m
+          ? trafficUsedBytes(
+              m.network.totalUp,
+              m.network.totalDown,
+              n.traffic_limit_type,
+            )
+          : 0;
         const tPct = n.traffic_limit > 0 ? percentOf(tUsed, n.traffic_limit) : 0;
         const tags = parseTags(n.tags);
         const price =
@@ -178,7 +185,16 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                           ? "table-row-clickable"
                           : "table-row-clickable is-offline"
                       }
+                      tabIndex={0}
+                      role="link"
+                      aria-label={d.name || row.id}
                       onClick={() => navigate(`/node/${row.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          navigate(`/node/${row.id}`);
+                        }
+                      }}
                     >
                       <TableCell>
                         <span
@@ -191,13 +207,17 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
 
                       <TableCell>
                         <span className="table-icon-cell" title={d._os.label}>
-                          <QuickIcon icon={d._os.icon} size={16} />
+                          <QuickIcon icon={d._os.icon} size={18} title={d._os.label} />
                         </span>
                       </TableCell>
 
                       <TableCell>
                         <span className="table-icon-cell" title={d._arch.label}>
-                          <QuickIcon icon={d._arch.icon} size={16} />
+                          <QuickIcon
+                            icon={d._arch.icon}
+                            size={18}
+                            title={d._arch.label}
+                          />
                         </span>
                       </TableCell>
 

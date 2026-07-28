@@ -38,6 +38,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.101.4
         version: 5.101.4(react@19.2.8)
+      '@types/react-simple-maps':
+        specifier: ^3.0.6
+        version: 3.0.6
       archiver:
         specifier: ^8.0.0
         version: 8.0.0
@@ -90,9 +93,6 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.17)
-      '@types/react-simple-maps':
-        specifier: ^3.0.6
-        version: 3.0.6
       sass-embedded:
         specifier: ^1.100.0
         version: 1.100.0

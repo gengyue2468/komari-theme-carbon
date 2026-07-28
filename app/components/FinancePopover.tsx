@@ -74,6 +74,8 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
           role="button"
           tabIndex={0}
           aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-controls="finance-popover-panel"
           aria-label={label}
           onClick={() => setOpen((v) => !v)}
           onKeyDown={(e) => {
@@ -100,7 +102,10 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
 
         <PopoverContent className="finance-popover__content">
           <div
+            id="finance-popover-panel"
             className="finance-panel"
+            role="dialog"
+            aria-label={label}
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >

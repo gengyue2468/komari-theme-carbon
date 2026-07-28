@@ -1,0 +1,15 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+/node_modules/
+
+# React Router / Vite
+/.react-router/
+/build/
+/dist/
+
+# Theme release artifacts
+*.zip
+
+.playwright-mcp/

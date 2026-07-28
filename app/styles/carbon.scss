@@ -1,0 +1,1802 @@
+@use "@carbon/react/scss/config" with (
+  $css--font-face: false
+);
+@use "@carbon/react";
+@use "@carbon/react/scss/theme" as *;
+@use "@carbon/react/scss/themes";
+@use "@carbon/react/scss/spacing" as *;
+@use "@carbon/react/scss/type" as *;
+@use "@carbon/react/scss/motion" as *;
+
+@import "@carbon/charts/styles.css";
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@ibm/plex/IBM-Plex-Sans/fonts/complete/woff2/IBMPlexSans-Regular.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("@ibm/plex/IBM-Plex-Sans/fonts/complete/woff2/IBMPlexSans-SemiBold.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("@ibm/plex/IBM-Plex-Sans/fonts/complete/woff2/IBMPlexSans-Bold.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@ibm/plex/IBM-Plex-Mono/fonts/complete/woff2/IBMPlexMono-Regular.woff2")
+    format("woff2");
+}
+
+:root {
+  @include theme(themes.$g10);
+  --cds-font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --container-max: 80rem;
+  --container-pad: #{$spacing-05};
+  --header-h: 3rem;
+}
+
+html[data-carbon-theme="g100"] {
+  @include theme(themes.$g100);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: $background;
+  color: $text-primary;
+  font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+}
+
+.mono {
+  font-family: "IBM Plex Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-03;
+}
+
+/* ── Shell: Emerald structure (top header + centered main) ── */
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: $background;
+}
+
+.loading-cover {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: grid;
+  place-items: center;
+  background: $background;
+}
+
+.app-header.cds--header {
+  border-bottom: none;
+  justify-content: center;
+}
+
+.app-header__inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.app-header__brand {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: $spacing-03;
+  min-width: 0;
+  max-width: min(50%, 20rem);
+  height: 100%;
+  margin: 0;
+  padding-inline: $spacing-02 $spacing-05;
+  text-decoration: none;
+  color: $text-primary;
+  font-weight: 600;
+  @include type-style("body-compact-01");
+
+  &:hover {
+    color: $link-primary;
+  }
+
+  &:focus {
+    outline: 2px solid $focus;
+    outline-offset: -2px;
+  }
+}
+
+.app-header__avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: $layer-accent-01;
+  border: 1px solid $border-subtle-01;
+  display: grid;
+  place-items: center;
+}
+
+.app-header__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.app-header__avatar-fallback {
+  @include type-style("label-01");
+  font-weight: 600;
+  color: $text-secondary;
+  line-height: 1;
+}
+
+.app-header__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.app-header__inner .cds--header__global {
+  margin-inline-start: auto;
+}
+
+.app-main {
+  flex: 1;
+  padding-top: var(--header-h);
+}
+
+.container {
+  width: 100%;
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding-inline: var(--container-pad);
+}
+
+/* Full-width status / error banners */
+.page-banner.cds--inline-notification,
+.page-banner.cds--actionable-notification,
+.cds--inline-notification.page-banner {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.app-main .cds--inline-notification,
+.app-main .cds--actionable-notification {
+  width: 100%;
+  max-width: 100%;
+}
+
+.app-footer {
+  color: $text-secondary;
+  font-size: 0.75rem;
+}
+
+.app-footer__row {
+  padding-block: var(--container-pad);
+  flex-wrap: wrap;
+}
+
+.app-footer a {
+  color: inherit;
+  text-decoration: none;
+
+  &:hover {
+    color: $link-primary;
+  }
+}
+
+.app-footer strong {
+  color: $text-primary;
+  font-weight: 600;
+}
+
+/* ── Home bar: Emerald toolbar layout ── */
+
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-05;
+}
+
+.home-header {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: $spacing-05;
+  width: 100%;
+}
+
+.home-header__left,
+.home-header__right {
+  flex: 1 1 50%;
+  min-width: 0;
+  width: 50%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Emerald order (column-major):
+   memory | remaining | uplink
+   disk   | traffic   | downlink */
+.home-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-auto-flow: column;
+  gap: $spacing-05;
+  flex: 1;
+  height: 100%;
+  min-height: 12rem;
+}
+
+/* ── World map (react-simple-maps + Carbon tokens) ── */
+
+.node-map.cds--tile,
+.node-map--placeholder {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-03;
+  padding: $spacing-05;
+  overflow: hidden;
+}
+
+.node-map--placeholder {
+  background: $layer-01;
+  border: 1px solid $border-subtle-01;
+  min-height: 12rem;
+}
+
+.node-map__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-03;
+  flex-shrink: 0;
+}
+
+.node-map__title {
+  @include type-style("label-01");
+  color: $text-secondary;
+}
+
+.node-map__meta {
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+}
+
+.node-map__corner {
+  position: absolute;
+  right: $spacing-02;
+  bottom: $spacing-02;
+  z-index: 2;
+}
+
+.node-map__reset.cds--btn {
+  min-height: 1.75rem;
+  background: $layer-01;
+  border: 1px solid $border-subtle-01;
+}
+
+.node-map__canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: $layer-01;
+  border: 1px solid $border-subtle-01;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.node-map__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.node-map__count {
+  fill: #fff;
+  font-family: "IBM Plex Mono", Menlo, monospace;
+  font-weight: 600;
+  pointer-events: none;
+  user-select: none;
+}
+
+.node-map__panel {
+  position: absolute;
+  left: $spacing-03;
+  bottom: $spacing-03;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+  width: min(16rem, calc(100% - #{$spacing-06}));
+  max-height: min(12rem, 70%);
+  padding: $spacing-03;
+  background: $layer-01;
+  border: 1px solid $border-subtle-01;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.node-map__panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: $spacing-03;
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+}
+
+.node-map__cards {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+  overflow: auto;
+  min-height: 0;
+}
+
+.node-map__card {
+  display: flex;
+  align-items: center;
+  gap: $spacing-03;
+  margin: 0;
+  padding: $spacing-02 $spacing-03;
+  border: 1px solid $border-subtle-01;
+  background: $layer-02;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  color: inherit;
+
+  &:hover {
+    background: $layer-hover-01;
+    border-color: $border-strong-01;
+  }
+
+  &:focus {
+    outline: 2px solid $focus;
+    outline-offset: -2px;
+  }
+}
+
+.node-map__card-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: $support-error;
+}
+
+.node-map__card-dot.is-on {
+  background: $interactive;
+}
+
+.node-map__card-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.node-map__card-name {
+  @include type-style("body-compact-01");
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-map__card-meta {
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+
+/* Ocean = layer-01; land = soft interactive blue tint */
+.node-map__land {
+  fill: color-mix(in srgb, $interactive 18%, $layer-02);
+  stroke: $layer-01;
+  stroke-width: 0.55;
+  outline: none;
+  vector-effect: non-scaling-stroke;
+  transition: fill 0.12s ease;
+}
+
+.node-map__land:hover {
+  fill: color-mix(in srgb, $interactive 32%, $layer-02);
+}
+
+.node-map__land.is-active {
+  fill: color-mix(in srgb, $interactive 42%, $layer-02);
+  stroke: color-mix(in srgb, $interactive 55%, $border-subtle-01);
+  stroke-width: 0.7;
+}
+
+.node-map__marker .node-map__dot {
+  stroke: $layer-01;
+  stroke-width: 1.25;
+}
+
+.node-map__marker.is-on .node-map__dot {
+  fill: $interactive;
+}
+
+.node-map__marker.is-off .node-map__dot {
+  fill: $support-error;
+}
+
+.node-map__hit {
+  fill: transparent;
+}
+
+.node-map__tooltip {
+  position: absolute;
+  left: $spacing-03;
+  bottom: $spacing-03;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: $spacing-02 $spacing-03;
+  background: $layer-01;
+  border: 1px solid $border-subtle-01;
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+  pointer-events: none;
+  max-width: calc(100% - #{$spacing-05});
+  z-index: 2;
+}
+
+.node-map__tooltip strong {
+  color: $text-primary;
+  font-weight: 600;
+}
+
+.home-stat-card.cds--tile {
+  min-height: 0;
+  height: 100%;
+  padding: $spacing-05;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: $spacing-03;
+}
+
+.home-stat-card--clickable {
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  transition: background 0.12s ease;
+
+  &:hover {
+    background: $layer-hover-01;
+  }
+
+  &:focus {
+    outline: 2px solid $focus;
+    outline-offset: -2px;
+  }
+}
+
+.finance-stat {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+}
+
+.finance-stat .cds--popover-container,
+.finance-stat .cds--popover {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.finance-popover__content {
+  width: min(22rem, 90vw);
+  max-width: 90vw;
+  padding: 0;
+}
+
+.finance-panel {
+  padding: $spacing-05;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-04;
+  background: $layer-01;
+  color: $text-primary;
+}
+
+.finance-panel__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: $spacing-03;
+}
+
+.finance-panel__item {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+}
+
+.finance-panel__label {
+  @include type-style("label-01");
+  color: $text-secondary;
+}
+
+.finance-panel__value {
+  @include type-style("productive-heading-02");
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.finance-panel__sym {
+  @include type-style("label-01");
+  color: $text-secondary;
+  margin-inline-end: $spacing-01;
+}
+
+.finance-panel__hint {
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+}
+
+.finance-panel__rates-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-03;
+}
+
+.finance-panel__dropdown {
+  max-width: 7rem;
+  min-width: 5.5rem;
+}
+
+.finance-panel__rates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: $spacing-02 $spacing-05;
+  max-height: 8.5rem;
+  overflow: auto;
+}
+
+.finance-panel__rate {
+  display: flex;
+  justify-content: space-between;
+  gap: $spacing-03;
+  @include type-style("helper-text-01");
+}
+
+.finance-panel__rate-code {
+  color: $text-secondary;
+}
+
+.home-stat-card__top {
+  align-items: flex-start;
+}
+
+.home-stat-card__label {
+  @include type-style("label-01");
+  color: $text-secondary;
+  letter-spacing: 0.02em;
+}
+
+.home-stat-card__icon {
+  color: $icon-secondary;
+  flex-shrink: 0;
+  opacity: 0.45;
+}
+
+.home-stat-card__value-row {
+  display: flex;
+  align-items: baseline;
+  gap: $spacing-02;
+  min-width: 0;
+}
+
+.home-stat-card__value {
+  @include type-style("productive-heading-04");
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.home-stat-card__unit {
+  @include type-style("label-01");
+  color: $text-secondary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+@media (max-width: 66rem) {
+  .home-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .home-header__left,
+  .home-header__right {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  .home-stat-grid {
+    min-height: 11rem;
+  }
+
+  .node-map.cds--tile {
+    min-height: 14rem;
+  }
+}
+
+@media (max-width: 42rem) {
+  .home-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    grid-auto-flow: column;
+  }
+}
+
+/* toolbar under stats: groups left · view/search right */
+.home-toolbar {
+  gap: $spacing-05;
+  width: 100%;
+}
+
+.home-toolbar__groups {
+  min-width: 0;
+  max-width: min(100%, 28rem);
+  flex: 0 1 auto;
+}
+
+/* Contained tabs: single row; Carbon shows L/R overflow buttons when needed */
+.home-group-tabs.cds--tabs {
+  width: 100%;
+  max-width: 100%;
+}
+
+.home-group-tabs .cds--tab--list {
+  flex-wrap: nowrap;
+}
+
+.home-toolbar__tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: $spacing-02;
+  flex-shrink: 0;
+  min-height: 2.5rem;
+  transition: min-width 0.2s ease;
+}
+
+.home-toolbar__tools.is-searching {
+  flex: 1 1 auto;
+  min-width: min(100%, 16rem);
+  max-width: 22rem;
+}
+
+.home-search-expand {
+  display: flex;
+  align-items: center;
+  gap: $spacing-02;
+  width: 100%;
+  animation: search-in 0.18s ease;
+}
+
+.home-search-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.empty {
+  margin: $spacing-09 0;
+  text-align: center;
+  color: $text-secondary;
+}
+
+@keyframes search-in {
+  from {
+    opacity: 0;
+    transform: translateX(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 42rem) {
+  .home-toolbar__groups {
+    max-width: min(100%, 14rem);
+    flex: 1 1 auto;
+  }
+
+  .home-toolbar__tools.is-searching {
+    max-width: min(100%, 12rem);
+  }
+}
+
+/* ── Node grid ── */
+
+.node-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: $spacing-05;
+}
+
+@media (max-width: 66rem) {
+  .node-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 42rem) {
+  .node-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Node card: Carbon-native structured tile ── */
+
+.node-card.cds--tile {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-05;
+  padding: 0 0 $spacing-05 0;
+}
+
+/* --- Header --- */
+
+.node-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-03;
+  padding: $spacing-05 $spacing-05 0;
+}
+
+.node-card__head-left {
+  display: flex;
+  align-items: center;
+  gap: $spacing-03;
+  min-width: 0;
+  flex: 1;
+}
+
+.node-card__head-right {
+  flex-shrink: 0;
+}
+
+.node-card__title {
+  @include type-style("productive-heading-02");
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: $spacing-02;
+}
+
+.node-card__flag {
+  width: 1.125rem;
+  height: auto;
+  flex-shrink: 0;
+  border: 1px solid $border-subtle-01;
+}
+
+/* --- Subtitle row --- */
+
+.node-card__sub {
+  display: flex;
+  align-items: center;
+  gap: $spacing-03;
+  padding: 0 $spacing-05;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.node-card__badges {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-02;
+  color: $icon-secondary;
+  flex-shrink: 0;
+}
+
+.node-card__cpu {
+  @include type-style("label-01");
+  color: $text-secondary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: right;
+}
+
+/* --- Sections --- */
+
+.card-section {
+  padding: 0 $spacing-05;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-03;
+}
+
+.card-section__title {
+  @include type-style("label-01");
+  margin: 0;
+  color: $text-secondary;
+}
+
+/* --- KV grid (CPU / RAM / Disk / Traffic) --- */
+
+.card-kv-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: $spacing-04 $spacing-05;
+}
+
+.card-kv {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+  min-width: 0;
+}
+
+.card-kv__head {
+  display: flex;
+  justify-content: space-between;
+  gap: $spacing-02;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.card-kv__label {
+  @include type-style("label-01");
+  color: $text-secondary;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.card-kv__value {
+  text-align: right;
+  @include type-style("productive-heading-02");
+  line-height: 1.1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-kv__unit {
+  @include type-style("label-01");
+  color: $text-secondary;
+  margin-left: $spacing-01;
+}
+
+.card-kv__hint {
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Bar (thin progress) --- */
+
+.card-bar {
+  height: 0.25rem;
+  background: $layer-accent-01;
+  overflow: hidden;
+}
+
+.card-bar__fill {
+  height: 100%;
+  background: $interactive;
+  transition: width 0.3s ease;
+}
+
+.card-bar__fill--warn { background: $support-warning; }
+.card-bar__fill--error { background: $support-error; }
+
+/* --- Row (label … value) --- */
+
+.card-row {
+  display: flex;
+  justify-content: space-between;
+  gap: $spacing-03;
+  align-items: baseline;
+  @include type-style("body-compact-01");
+}
+
+.card-row__label {
+  color: $text-secondary;
+  flex-shrink: 0;
+}
+
+.card-row__value {
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Rate pair --- */
+
+.card-rate {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-04;
+}
+
+.card-rate__up,
+.card-rate__down {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-02;
+}
+
+.card-rate__up { color: $interactive; }
+
+.card-rate__down { color: $support-info; }
+
+/* --- ISP row --- */
+
+.card-isp {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: $spacing-04;
+  row-gap: $spacing-01;
+  @include type-style("body-compact-01");
+  color: $text-secondary;
+}
+
+.card-isp__val {
+  color: $text-primary;
+  margin-left: $spacing-02;
+}
+
+.card-isp__sep {
+  color: $border-subtle-01;
+  &::before { content: "|"; }
+}
+
+/* --- Sparkline grid --- */
+
+.card-spark-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: $spacing-03 $spacing-04;
+}
+
+.card-spark {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+  min-width: 0;
+}
+
+.card-spark__track {
+  display: grid;
+  align-items: end;
+  gap: 1px;
+  height: 0.625rem;
+}
+
+.card-spark__cell {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0.2rem;
+  background: $layer-accent-01;
+}
+
+.card-spark__cell.ping-bar__cell--empty { background: $border-subtle-01; opacity: 0.4; }
+.card-spark__cell.ping-bar__cell--good { background: $interactive; }
+.card-spark__cell.ping-bar__cell--ok   { background: color-mix(in srgb, $interactive 70%, $support-warning); }
+.card-spark__cell.ping-bar__cell--fair { background: $support-warning; }
+.card-spark__cell.ping-bar__cell--slow { background: color-mix(in srgb, $support-warning 70%, $support-error); }
+.card-spark__cell.ping-bar__cell--bad  { background: $support-error; }
+
+/* --- Tags --- */
+
+.node-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-02;
+  padding: 0 $spacing-05;
+}
+
+/* --- Node table: Carbon DataTable defaults + cell content only --- */
+
+.node-table-wrap {
+  width: 100%;
+  min-width: 0;
+}
+
+.node-table-wrap .cds--data-table-container {
+  padding-top: 0;
+}
+
+.node-table-wrap .cds--data-table-content {
+  overflow-x: auto;
+}
+
+.node-table-wrap .cds--data-table {
+  min-width: 66rem;
+}
+
+/* Headers: full label, no wrap / no ellipsis (e.g. 状态 系统 架构) */
+.node-table-wrap .cds--data-table th,
+.node-table-wrap .cds--table-header-label,
+.node-table-wrap .cds--table-sort__flex,
+.node-table-wrap .cds--table-sort {
+  white-space: nowrap;
+}
+
+.node-table-wrap .cds--table-header-label {
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
+}
+
+.node-table-wrap .cds--data-table td {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.node-table-wrap .cds--data-table tbody tr.table-row-clickable {
+  cursor: pointer;
+}
+
+.node-table-wrap .cds--data-table tbody tr.is-offline td {
+  color: $text-secondary;
+}
+
+.table-icon-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 0;
+}
+
+/* Cell content helpers (not layout/width hacks) */
+
+.table-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: $support-error;
+  vertical-align: middle;
+}
+
+.table-dot.is-on {
+  background: $interactive;
+}
+
+.table-flag {
+  width: 1rem;
+  height: auto;
+  flex-shrink: 0;
+  border: 1px solid $border-subtle-01;
+}
+
+.table-name {
+  min-width: 0;
+}
+
+.table-name.is-dim {
+  opacity: 0.55;
+}
+
+.table-name__top {
+  display: flex;
+  align-items: center;
+  gap: $spacing-02;
+  min-width: 0;
+}
+
+.table-name__text {
+  @include type-style("body-compact-01");
+  font-weight: 600;
+}
+
+.table-name__sub {
+  display: block;
+  margin-top: $spacing-01;
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+}
+
+.table-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-02;
+  align-items: center;
+}
+
+.table-chips .cds--tag {
+  margin: 0;
+}
+
+.table-metric {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-01;
+  min-width: 5.5rem;
+}
+
+.table-metric__pct {
+  @include type-style("helper-text-01");
+}
+
+.table-metric__sub {
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+}
+
+.table-rate-cell,
+.table-isp-cell {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-01;
+}
+
+.table-rate-cell__line,
+.table-isp-cell__line {
+  @include type-style("helper-text-01");
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-02;
+}
+
+.table-isp-cell__name {
+  color: $text-secondary;
+}
+
+.table-isp-cell__val {
+  color: $text-primary;
+}
+
+.card-bar--sm {
+  width: 100%;
+  min-width: 4rem;
+  height: 0.25rem;
+}
+
+.table-rate__up {
+  color: $interactive;
+}
+
+.table-rate__down {
+  color: $support-info;
+}
+
+/* ── Detail page (Emerald layout, Carbon style) ── */
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-05;
+}
+
+.detail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $spacing-05;
+  padding: $spacing-09 $spacing-05;
+  text-align: center;
+}
+
+.detail-top__left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $spacing-03;
+  min-width: 0;
+}
+
+.detail-remark {
+  margin: 0;
+  padding: $spacing-04 $spacing-05;
+  background: $layer-01;
+  border-inline-start: 3px solid $interactive;
+  @include type-style("body-compact-01");
+  color: $text-secondary;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.detail-title {
+  @include type-style("productive-heading-03");
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-03;
+  min-width: 0;
+}
+
+.detail-flag {
+  width: 1.5rem;
+  height: auto;
+  border: 1px solid $border-subtle-01;
+  flex-shrink: 0;
+}
+
+.detail-finance-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: $spacing-05;
+}
+
+.detail-metric-card.cds--tile {
+  min-height: 5.5rem;
+  padding: $spacing-05;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: $spacing-03;
+}
+
+.detail-metric-card__label {
+  @include type-style("label-01");
+  color: $text-secondary;
+}
+
+.detail-metric-card__icon {
+  color: $icon-secondary;
+  opacity: 0.45;
+}
+
+.detail-metric-card__value-row {
+  display: flex;
+  align-items: baseline;
+  gap: $spacing-02;
+  min-width: 0;
+}
+
+.detail-metric-card__value {
+  @include type-style("productive-heading-03");
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-metric-card__unit {
+  @include type-style("label-01");
+  color: $text-secondary;
+}
+
+.detail-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-05;
+}
+
+.detail-section.cds--tile {
+  padding: $spacing-05;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-04;
+  background: $layer-01;
+}
+
+.detail-section__title {
+  @include type-style("heading-compact-01");
+  margin: 0;
+  color: $text-secondary;
+}
+
+.detail-info-cells {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: $spacing-03;
+}
+
+.detail-info-cells--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.detail-info-cells--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* Nested cells: soft wash on section tile, no heavy layer-02 boxes */
+.detail-info-cell {
+  position: relative;
+  min-width: 0;
+  background: color-mix(in srgb, $text-primary 4%, transparent);
+  border: none;
+  padding: $spacing-04;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+  overflow: hidden;
+}
+
+.detail-info-cell.is-wide {
+  grid-column: 1 / -1;
+}
+
+.detail-info-cell__label {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-02;
+  color: $text-secondary;
+  @include type-style("label-01");
+  min-width: 0;
+}
+
+.detail-info-cell__value {
+  @include type-style("body-compact-01");
+  word-break: break-word;
+}
+
+.detail-info-cell__body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+  min-width: 0;
+}
+
+.detail-network-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: $spacing-03;
+}
+
+/* Emerald-style: usage as background fill inside the traffic cell */
+.detail-info-cell--traffic {
+  justify-content: center;
+}
+
+.detail-traffic-fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, $interactive 14%, transparent);
+  transition: width 0.3s ease;
+}
+
+.detail-info-cell--traffic.is-warn .detail-traffic-fill {
+  background: color-mix(in srgb, $support-warning 28%, transparent);
+}
+
+.detail-info-cell--traffic.is-error .detail-traffic-fill {
+  background: color-mix(in srgb, $support-error 18%, transparent);
+}
+
+.detail-traffic-ud {
+  margin-inline-start: auto;
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55%;
+}
+
+.detail-traffic-pct {
+  color: $text-secondary;
+  @include type-style("helper-text-01");
+}
+
+.rate-pair {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $spacing-04;
+}
+
+.rate-pair__up {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-02;
+  color: $interactive;
+}
+
+.rate-pair__down {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-02;
+  color: $support-info;
+}
+
+.chart-panel {
+  background: $layer-01;
+  border: 1px solid $border-subtle-01;
+  padding: $spacing-05;
+}
+
+.chart-panel__header {
+  gap: $spacing-05;
+  flex-wrap: wrap;
+  margin-bottom: $spacing-05;
+}
+
+/* ── Load chart panel (Emerald 6-cell grid, Carbon charts) ── */
+
+.load-chart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-05;
+}
+
+.load-chart-panel__toolbar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* Same as home group tabs: contained + Carbon overflow when needed */
+.chart-range-tabs.cds--tabs {
+  width: 100%;
+  max-width: 100%;
+}
+
+.chart-range-tabs .cds--tab--list {
+  flex-wrap: nowrap;
+}
+
+.load-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: $spacing-05;
+}
+
+.load-chart-card.cds--tile {
+  padding: $spacing-05;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-03;
+  min-width: 0;
+  background: $layer-01;
+}
+
+.load-chart-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: $spacing-03;
+  min-width: 0;
+}
+
+.load-chart-card__title {
+  @include type-style("productive-heading-01");
+  margin: 0;
+}
+
+.load-chart-card__meta {
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.load-chart-card__body {
+  min-height: 12.5rem;
+  min-width: 0;
+
+  .cds--cc--chart-wrapper,
+  .layout-child {
+    width: 100% !important;
+  }
+}
+
+.load-chart-card__empty {
+  min-height: 12.5rem;
+  display: grid;
+  place-items: center;
+  color: $text-secondary;
+}
+
+@media (max-width: 66rem) {
+  .load-chart-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 42rem) {
+  .load-chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Ping chart (Emerald multi-task latency, Carbon) ── */
+
+.ping-chart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-05;
+}
+
+.ping-chart-panel__toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-03;
+  min-width: 0;
+  width: 100%;
+}
+
+.ping-chart-panel__tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ping-chart-panel__select {
+  display: flex;
+  gap: $spacing-02;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.ping-task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: $spacing-03;
+}
+
+.ping-task-card {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid $border-subtle-01;
+  background: $layer-01;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.ping-task-card:hover {
+  border-color: $border-strong-01;
+  background: $layer-hover-01;
+}
+
+.ping-task-card.is-dim {
+  opacity: 0.35;
+}
+
+.ping-task-card.is-active {
+  opacity: 1;
+}
+
+.ping-task-card__bar {
+  width: 0.25rem;
+  flex-shrink: 0;
+}
+
+.ping-task-card__body {
+  flex: 1;
+  min-width: 0;
+  padding: $spacing-03 $spacing-04;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-02;
+}
+
+.ping-task-card__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: $spacing-03;
+  min-width: 0;
+}
+
+.ping-task-card__name {
+  @include type-style("body-compact-01");
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ping-task-card__latest {
+  @include type-style("productive-heading-01");
+  flex-shrink: 0;
+}
+
+.ping-task-card__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-03;
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+}
+
+.ping-chart-main.cds--tile {
+  padding: $spacing-05;
+  background: $layer-01;
+  min-width: 0;
+}
+
+.ping-chart-main__empty {
+  min-height: 16rem;
+  display: grid;
+  place-items: center;
+  color: $text-secondary;
+  @include type-style("body-compact-01");
+}
+
+.chart-panel__header h3 {
+  @include type-style("heading-compact-01");
+  margin: 0;
+}
+
+.chart-panel__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-05;
+  margin-bottom: $spacing-04;
+  color: $text-secondary;
+  @include type-style("label-01");
+}
+
+@media (max-width: 66rem) {
+  .detail-finance-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 42rem) {
+  .detail-finance-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .detail-info-cells,
+  .detail-info-cells--2,
+  .detail-info-cells--3,
+  .detail-network-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-info-cell.is-wide {
+    grid-column: auto;
+  }
+}
+
+.page-spinner {
+  min-height: 12rem;
+  display: grid;
+  place-items: center;
+}
+
+.status-pill {
+  @include type-style("label-01");
+  padding: $spacing-01 $spacing-03;
+  border: 1px solid $border-subtle-01;
+  color: $text-secondary;
+}
+
+.status-pill.is-on {
+  border-color: $interactive;
+  color: $interactive;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: $support-error;
+  flex-shrink: 0;
+}
+
+.status-dot.is-on {
+  background: $interactive;
+}
+
+.hydrate-fallback {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: $spacing-04;
+  background: $background;
+}
+
+.hydrate-fallback__spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 2px solid $border-subtle-01;
+  border-top-color: $interactive;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 42rem) {
+  .home-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .home-bar__tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .home-search {
+    flex: 1;
+    width: auto;
+    min-width: 8rem;
+  }
+}

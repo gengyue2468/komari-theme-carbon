@@ -1,0 +1,59 @@
+{
+  "name": "komari-theme-carbon",
+  "private": true,
+  "version": "0.1.0",
+  "description": "IBM Carbon + IBM Plex theme for Komari Monitor",
+  "author": "gengyue2468",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gengyue2468/komari-theme-carbon.git"
+  },
+  "homepage": "https://github.com/gengyue2468/komari-theme-carbon",
+  "bugs": {
+    "url": "https://github.com/gengyue2468/komari-theme-carbon/issues"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "react-router dev",
+    "build": "react-router build",
+    "typecheck": "react-router typegen && tsc",
+    "package": "node scripts/package.mjs",
+    "release": "pnpm build && pnpm package"
+  },
+  "dependencies": {
+    "@carbon/charts": "^1.27.17",
+    "@carbon/charts-react": "^1.27.16",
+    "@carbon/icons-react": "^11.84.0",
+    "@carbon/react": "^1.111.1",
+    "@carbon/styles": "^1.111.0",
+    "@ibm/plex": "^6.4.1",
+    "@iconify/react": "^6.0.2",
+    "@react-router/node": "^8",
+    "@react-router/serve": "^8",
+    "@tanstack/react-query": "^5.101.4",
+    "archiver": "^8.0.0",
+    "country-flag-icons": "^1.6.20",
+    "i18next": "^26.3.6",
+    "isbot": "^5.1.36",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-i18next": "^17.0.11",
+    "react-is": "^19.2.8",
+    "react-router": "^8",
+    "react-simple-maps": "^3.0.0",
+    "sass": "^1.102.0",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@react-router/dev": "^8",
+    "@types/archiver": "^8.0.0",
+    "@types/node": "^22",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/react-simple-maps": "^3.0.6",
+    "sass-embedded": "^1.100.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.3"
+  }
+}

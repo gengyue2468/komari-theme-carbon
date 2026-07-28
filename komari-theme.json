@@ -1,0 +1,109 @@
+{
+  "name": "Komari Carbon",
+  "short": "komari-theme-carbon",
+  "description": "IBM Carbon + IBM Plex style Komari monitoring theme",
+  "version": "0.1.0",
+  "author": "gengyue2468",
+  "url": "https://github.com/gengyue2468/komari-theme-carbon",
+  "preview": "preview.png",
+  "configuration": {
+    "type": "managed",
+    "name": {
+      "zh-CN": "Carbon 主题设置",
+      "en": "Carbon Theme Settings"
+    },
+    "data": [
+      {
+        "name": {
+          "zh-CN": "显示",
+          "en": "Display"
+        },
+        "type": "title"
+      },
+      {
+        "key": "defaultView",
+        "name": {
+          "zh-CN": "默认视图",
+          "en": "Default view"
+        },
+        "type": "select",
+        "options": "grid,table",
+        "default": "grid",
+        "help": {
+          "zh-CN": "节点列表默认展示方式",
+          "en": "Default node list presentation"
+        }
+      },
+      {
+        "key": "showUptime",
+        "name": {
+          "zh-CN": "显示运行时间",
+          "en": "Show uptime"
+        },
+        "type": "switch",
+        "default": true,
+        "help": {
+          "zh-CN": "在节点卡片上显示 uptime",
+          "en": "Show uptime on node cards"
+        }
+      },
+      {
+        "key": "defaultChartHours",
+        "name": {
+          "zh-CN": "默认图表时长（小时）",
+          "en": "Default chart hours"
+        },
+        "type": "number",
+        "default": 4,
+        "help": {
+          "zh-CN": "节点详情页历史曲线默认时间范围",
+          "en": "Default history range on node detail"
+        }
+      },
+      {
+        "key": "density",
+        "name": {
+          "zh-CN": "密度",
+          "en": "Density"
+        },
+        "type": "select",
+        "options": "comfortable,compact",
+        "default": "comfortable"
+      },
+      {
+        "name": {
+          "zh-CN": "数据",
+          "en": "Data"
+        },
+        "type": "title"
+      },
+      {
+        "key": "dataUpdateInterval",
+        "name": {
+          "zh-CN": "数据刷新间隔（秒）",
+          "en": "Data update interval (seconds)"
+        },
+        "type": "number",
+        "default": 3,
+        "help": {
+          "zh-CN": "实时状态轮询间隔，1-60",
+          "en": "Realtime poll interval, 1-60"
+        }
+      },
+      {
+        "key": "rpcTransportMode",
+        "name": {
+          "zh-CN": "RPC 传输",
+          "en": "RPC transport"
+        },
+        "type": "select",
+        "options": "websocket,http",
+        "default": "websocket",
+        "help": {
+          "zh-CN": "优先 WebSocket，失败自动降级 HTTP",
+          "en": "Prefer WebSocket; falls back to HTTP"
+        }
+      }
+    ]
+  }
+}

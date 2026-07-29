@@ -66,16 +66,8 @@ export default function NodeDetail() {
 
   if (!node) {
     if (loading) return <PageSpinner />;
-    return (
-      <div className="detail">
-        <Tile className="detail-empty">
-          <p>{t("detail.notFound")}</p>
-          <Button kind="primary" size="md" onClick={() => navigate("/")}>
-            {t("detail.back")}
-          </Button>
-        </Tile>
-      </div>
-    );
+    // eslint-disable-next-line @typescript-eslint/only-throw-error
+    throw new Response(t("detail.notFound"), { status: 404 });
   }
 
   const tags = parseTags(node.tags);

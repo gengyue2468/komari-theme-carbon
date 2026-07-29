@@ -1,6 +1,5 @@
 import {
   IconButton,
-  InlineNotification,
   Search,
   Tab,
   TabList,
@@ -26,6 +25,7 @@ import { FinancePopover } from "~/components/FinancePopover";
 import { HomeStatCard } from "~/components/HomeStatCard";
 import { NodeCard } from "~/components/NodeCard";
 import { NodeTable } from "~/components/NodeTable";
+import { StatPopover } from "~/components/StatPopover";
 import { computeHomeStats } from "~/lib/home-stats";
 import { useNodesStore } from "~/stores/nodes";
 import type { Route } from "./+types/home";
@@ -203,16 +203,7 @@ export default function Home() {
   };
 
   if (error) {
-    return (
-      <InlineNotification
-        className="page-banner"
-        kind="error"
-        title={t("app.error")}
-        subtitle={error}
-        lowContrast
-        hideCloseButton
-      />
-    );
+    throw new Error(error);
   }
 
   return (
@@ -220,24 +211,29 @@ export default function Home() {
       <header className="home-header">
         <div className="home-header__left">
           <div className="home-stat-grid">
-            {homeStats.map((stat) =>
-              stat.id === "remaining" ? (
+            {homeStats.map((stat) => {
+              const Icon = ICONS[stat.icon];
+              return stat.id === "remaining" ? (
                 <FinancePopover
                   key={stat.id}
                   nodes={nodes}
                   label={t(stat.labelKey)}
                 />
               ) : (
-                <HomeStatCard
+                <StatPopover
                   key={stat.id}
+                  stat={stat}
                   label={t(stat.labelKey)}
                   value={stat.value}
                   unit={stat.unit}
                   suffix={stat.suffix}
-                  icon={ICONS[stat.icon]}
+                  icon={<Icon size={20} className="home-stat-card__icon" />}
+                  nodes={nodes}
+                  realtime={realtime}
+                  onlineIds={onlineIds}
                 />
-              ),
-            )}
+              );
+            })}
           </div>
         </div>
         <div className="home-header__right">

@@ -618,6 +618,103 @@ body {
   color: $text-secondary;
 }
 
+/* ── Generic stat popover ── */
+
+.stat-popover-wrap {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+}
+
+.stat-popover-wrap .cds--popover-container,
+.stat-popover-wrap .cds--popover {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.stat-popover__content {
+  width: min(20rem, 88vw);
+  max-width: 88vw;
+  padding: 0;
+}
+
+.stat-popover-panel {
+  padding: $spacing-05;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-04;
+  background: $layer-01;
+  color: $text-primary;
+  max-height: min(22rem, 70vh);
+  overflow: auto;
+}
+
+.stat-popover__head {
+  @include type-style("label-01");
+  color: $text-secondary;
+}
+
+.stat-popover__empty {
+  @include type-style("body-compact-01");
+  color: $text-secondary;
+  margin: 0;
+}
+
+.stat-popover__list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-03;
+}
+
+.stat-popover__row {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-01;
+}
+
+.stat-popover__row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: $spacing-03;
+}
+
+.stat-popover__name {
+  @include type-style("label-01");
+  color: $text-secondary;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-popover__value {
+  @include type-style("productive-heading-01");
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.stat-popover__detail {
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+}
+
+.stat-popover__bar-track {
+  width: 100%;
+  height: 0.25rem;
+  background: $layer-accent-01;
+  border-radius: 1px;
+}
+
+.stat-popover__bar-fill {
+  height: 100%;
+  background: $interactive;
+  border-radius: 1px;
+  min-width: 0.15rem;
+}
+.stat-popover__bar-fill.is-warn { background: $support-warning; }
+.stat-popover__bar-fill.is-error { background: $support-error; }
+
 .home-stat-card__top {
   align-items: flex-start;
 }
@@ -1773,6 +1870,11 @@ html[data-carbon-theme="g100"] .rate-pair__down {
   place-items: center;
 }
 
+.page-spinner .cds--loading,
+.hydrate-fallback .cds--loading {
+  min-height: unset;
+}
+
 .status-pill {
   @include type-style("label-01");
   padding: $spacing-01 $spacing-03;
@@ -1805,21 +1907,6 @@ html[data-carbon-theme="g100"] .rate-pair__down {
   justify-items: center;
   gap: $spacing-04;
   background: $background;
-}
-
-.hydrate-fallback__spinner {
-  width: 1.5rem;
-  height: 1.5rem;
-  border: 2px solid $border-subtle-01;
-  border-top-color: $interactive;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @media (max-width: 42rem) {
@@ -1966,9 +2053,7 @@ html[data-carbon-theme="g100"] .rate-pair__down {
   /* footer tighter */
   .app-footer__row {
     padding-block: $spacing-03;
-    flex-direction: column;
-    gap: $spacing-02;
-    text-align: center;
+    text-align: left;
   }
 }
 

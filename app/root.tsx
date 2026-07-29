@@ -1,3 +1,4 @@
+import { InlineNotification, Loading } from "@carbon/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import {
   isRouteErrorResponse,
@@ -45,7 +46,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export function HydrateFallback() {
   return (
     <div className="hydrate-fallback" role="status" aria-label="Loading…">
-      <div className="hydrate-fallback__spinner" />
+      <Loading small withOverlay={false} />
     </div>
   );
 }
@@ -59,30 +60,34 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  let message = "Oops!";
-  let details = "An unexpected error occurred.";
-  let stack: string | undefined;
+  let title = "Error";
+  let subtitle = "An unexpected error occurred.";
 
   if (isRouteErrorResponse(error)) {
-    message = error.status === 404 ? "404" : "Error";
-    details =
-      error.status === 404
-        ? "The requested page could not be found."
-        : error.statusText || details;
-  } else if (import.meta.env.DEV && error && error instanceof Error) {
-    details = error.message;
-    stack = error.stack;
+    if (error.status === 404) {
+      title = "404";
+      subtitle = "The requested page could not be found.";
+    } else {
+      title = `Error ${error.status}`;
+      subtitle = error.statusText || String(error.data) || subtitle;
+    }
+  } else if (error instanceof Error) {
+    title = "Error";
+    subtitle = error.message;
   }
 
   return (
-    <main style={{ padding: "2rem" }}>
-      <h1>{message}</h1>
-      <p>{details}</p>
-      {stack && (
-        <pre style={{ overflow: "auto" }}>
-          <code>{stack}</code>
-        </pre>
-      )}
-    </main>
+    <QueryClientProvider client={queryClient}>
+      <AppShell>
+        <InlineNotification
+          className="page-banner"
+          kind="error"
+          title={title}
+          subtitle={subtitle}
+          lowContrast
+          hideCloseButton
+        />
+      </AppShell>
+    </QueryClientProvider>
   );
 }

@@ -23,7 +23,7 @@ import { useNodesStore } from "~/stores/nodes";
 const THEME_ORDER: Appearance[] = ["system", "light", "dark"];
 const FAVICON_SRC = "/favicon.ico";
 
-export function AppShell() {
+export function AppShell({ children }: { children?: React.ReactNode }) {
   const { t, i18n } = useTranslation();
   const appearance = useAppearanceStore((s) => s.appearance);
   const carbonTheme = useAppearanceStore((s) => s.carbonTheme);
@@ -135,7 +135,7 @@ export function AppShell() {
         <>
           <main id="main-content" className="app-main">
             <div className="container">
-              <Outlet />
+              {children ?? <Outlet />}
             </div>
           </main>
           <footer className="app-footer">

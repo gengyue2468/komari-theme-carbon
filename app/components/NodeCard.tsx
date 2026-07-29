@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp } from "@carbon/icons-react";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import { cardPingFromMetrics } from "~/lib/ping-display";
+import { cardPingFromMetrics, pickThreeNetworks } from "~/lib/ping-display";
 import { barToneClass, latencyToneClass } from "~/lib/ping-tone";
 import { QuickIcon } from "~/components/BrandIcon";
 import { RegionFlag } from "~/components/RegionFlag";
@@ -126,6 +126,7 @@ function StatGroup({ node, online, metrics, showUptime }: NodeCardProps) {
     : 0;
   const trafficPct =
     node.traffic_limit > 0 ? percentOf(trafficUsed, node.traffic_limit) : 0;
+
   const price =
     node.price < 0
       ? t("detail.free")
@@ -170,18 +171,25 @@ function StatGroup({ node, online, metrics, showUptime }: NodeCardProps) {
 function SectionPing({ metrics }: { metrics?: RealtimeMetrics }) {
   const { t } = useTranslation();
   const ping = useMemo(() => cardPingFromMetrics(metrics), [metrics]);
-  const networks = ping.networks.filter((n) => n.latencyMs != null);
+  const threeNets = useMemo(
+    () => pickThreeNetworks(metrics?.ping),
+    [metrics?.ping],
+  );
+
+  const ispLabel = (cat: "CT" | "CU" | "CM") =>
+    cat === "CT" ? t("metrics.ct") : cat === "CU" ? t("metrics.cu") : t("metrics.cm");
 
   return (
     <section className="card-section">
       <h3 className="card-section__title">{t("metrics.isp")}</h3>
-      {networks.length > 0 ? (
+      {threeNets.length > 0 ? (
         <div className="card-isp mono">
-          {networks.map((n, i) => (
-            <span key={n.name}>
-              <span className={n.latencyMs != null ? latencyToneClass(n.latencyMs) : undefined}>{n.name}</span>
-              <span className="card-isp__val">{n.latencyMs != null ? `${n.latencyMs}ms` : "--"}</span>
-              {i < networks.length - 1 && <span className="card-isp__sep" />}
+          {threeNets.map((net) => (
+            <span key={net.category}>
+              <span className={net.latencyMs != null ? latencyToneClass(net.latencyMs) : undefined}>
+                {ispLabel(net.category)}
+              </span>
+              <span className="card-isp__val">{net.latencyMs != null ? `${net.latencyMs}ms` : "—"}</span>
             </span>
           ))}
         </div>
@@ -206,11 +214,6 @@ export const NodeCard = memo(
     [node.arch, node.cpu_name],
   );
   const tags = useMemo(() => parseTags(node.tags), [node.tags]);
-  const virtMeta = useMemo(
-    () =>
-      node.virtualization ? getVirtIcon(node.virtualization) : null,
-    [node.virtualization],
-  );
 
   return (
     <ClickableTile
@@ -223,9 +226,6 @@ export const NodeCard = memo(
     >
       <div className="node-card__head">
         <div className="node-card__head-left">
-          {virtMeta ? (
-            <QuickIcon icon={virtMeta.icon} size={16} title={virtMeta.label} />
-          ) : null}
           <h3 className="node-card__title" title={node.name}>
             <RegionFlag region={node.region} className="node-card__flag" />
             {node.name}

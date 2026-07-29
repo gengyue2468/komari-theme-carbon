@@ -17,7 +17,8 @@ interface IconTipIconProps {
 function glyphScale(icon: IconRef): number {
   if (icon.kind !== "iconify") return 1;
   const id = icon.id.toLowerCase();
-  if (id.includes("amd") || id.includes("intel")) return 1.18;
+  if (id.includes("amd")) return 0.85;
+  if (id.includes("intel")) return 1.18;
   if (id.includes("arm") || id.includes("qemu") || id.includes("vmware"))
     return 1.08;
   return 1;

@@ -46,6 +46,12 @@ export default {
     latency: "Latency",
     loss: "Loss",
     gpu: "GPU",
+    ct: "CT",
+    cu: "CU",
+    cm: "CM",
+    telecom: "Telecom",
+    unicom: "Unicom",
+    mobile: "Mobile",
   },
   stats: {
     memory: "Memory",

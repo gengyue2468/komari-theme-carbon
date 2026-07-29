@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowUp,
   Calendar,
+  Chip,
   Currency,
   DataBase,
   Time,
@@ -46,6 +47,9 @@ export function meta({}: Route.MetaArgs) {
     { name: "description", content: "A simple server monitor tool." },
   ];
 }
+
+// Distinct tag colors by index
+const TAG_TYPES = ["blue", "cyan", "purple", "teal", "magenta"] as const;
 
 export default function NodeDetail() {
   const { uuid = "" } = useParams();
@@ -101,40 +105,67 @@ export default function NodeDetail() {
       : undefined;
 
   const finance = nodeFinance(node);
+
+  // Live metric cards: quick snapshot before finance
+  const cpuPct = metrics?.cpu.usage ?? 0;
+  const ramUsed = metrics?.ram.used ?? 0;
+  const ramTotal = node.mem_total || metrics?.ram.total || 0;
+  const ramPct = percentOf(ramUsed, ramTotal);
+  const diskUsed = metrics?.disk.used ?? 0;
+  const diskTotal = node.disk_total || metrics?.disk.total || 0;
+  const diskPct = percentOf(diskUsed, diskTotal);
+  const conns = (metrics?.connections.tcp ?? 0) + (metrics?.connections.udp ?? 0);
+  const swapUsed = metrics?.swap.used ?? 0;
+
+  const liveCards = [
+    {
+      key: "cpu",
+      label: t("metrics.cpu"),
+      value: `${cpuPct.toFixed(0)}%`,
+      icon: <Chip size={16} />,
+      bar: cpuPct,
+      hint: metrics
+        ? `${metrics.load.load1.toFixed(2)} · ${metrics.load.load5.toFixed(2)} · ${metrics.load.load15.toFixed(2)}`
+        : "",
+    },
+    {
+      key: "ram",
+      label: t("metrics.ram"),
+      value: formatBytes(ramUsed),
+      icon: <DataBase size={16} />,
+      bar: ramPct,
+      hint: `${ramPct.toFixed(0)}% / ${formatBytes(ramTotal)}`,
+    },
+    {
+      key: "disk",
+      label: t("metrics.disk"),
+      value: formatBytes(diskUsed),
+      icon: <DataBase size={16} />,
+      bar: diskPct,
+      hint: `${diskPct.toFixed(0)}% / ${formatBytes(diskTotal)}`,
+    },
+    {
+      key: "conn",
+      label: t("metrics.connections"),
+      value: String(conns),
+      icon: <Application size={16} />,
+      bar: 0,
+      hint: "",
+    },
+  ];
+
   const financeCards = [
-    {
-      key: "price",
-      label: t("detail.nodePrice"),
-      value: priceText,
-      unit: cycleText.trim() || undefined,
-      Icon: Currency,
-    },
-    {
-      key: "monthly",
-      label: t("stats.monthlyCost"),
-      value: finance.monthly,
-      Icon: Currency,
-    },
-    {
-      key: "remain-time",
-      label: t("detail.remainTime"),
-      value: remainTimeText,
-      unit: expireDateText,
-      Icon: Calendar,
-    },
-    {
-      key: "remain-value",
-      label: t("stats.remaining"),
-      value: finance.remaining,
-      Icon: Currency,
-    },
+    { key: "price", label: t("detail.nodePrice"), value: priceText, unit: cycleText.trim() || undefined, Icon: Currency },
+    { key: "monthly", label: t("stats.monthlyCost"), value: finance.monthly, Icon: Currency },
+    { key: "remain-time", label: t("detail.remainTime"), value: remainTimeText, unit: expireDateText, Icon: Calendar },
+    { key: "remain-value", label: t("stats.remaining"), value: finance.remaining, Icon: Currency },
   ];
 
   const hardwareItems = [
     {
       label: t("metrics.cpu"),
       value: `${node.cpu_name} (×${node.cpu_cores})`,
-      icon: <QuickIcon icon={arch.icon} size={16} title={arch.label} />,
+      icon: <Chip size={16} />,
       wide: true,
     },
     {
@@ -180,17 +211,23 @@ export default function NodeDetail() {
   const storageItems = [
     {
       label: t("metrics.ram"),
-      value: formatBytes(node.mem_total),
+      value: ramUsed > 0 ? formatBytes(ramUsed) : formatBytes(node.mem_total),
+      sub: ramUsed > 0 ? `/ ${formatBytes(ramTotal)}` : "",
+      pct: ramPct,
       icon: <DataBase size={16} />,
     },
     {
       label: t("detail.swap"),
-      value: formatBytes(node.swap_total),
+      value: swapUsed > 0 ? formatBytes(swapUsed) : formatBytes(node.swap_total),
+      sub: swapUsed > 0 ? `/ ${formatBytes(node.swap_total)}` : "",
+      pct: node.swap_total > 0 ? percentOf(swapUsed, node.swap_total) : 0,
       icon: <DataBase size={16} />,
     },
     {
       label: t("metrics.disk"),
-      value: formatBytes(node.disk_total),
+      value: diskUsed > 0 ? formatBytes(diskUsed) : formatBytes(node.disk_total),
+      sub: diskUsed > 0 ? `/ ${formatBytes(diskTotal)}` : "",
+      pct: diskPct,
       icon: <DataBase size={16} />,
     },
   ];
@@ -216,8 +253,8 @@ export default function NodeDetail() {
             title={online ? t("app.online") : t("app.offline")}
             aria-label={online ? t("app.online") : t("app.offline")}
           />
-          {tags.map((tag) => (
-            <Tag key={tag} type="blue" size="sm">
+          {tags.map((tag, i) => (
+            <Tag key={tag} type={TAG_TYPES[i % TAG_TYPES.length]} size="sm">
               {tag}
             </Tag>
           ))}
@@ -228,12 +265,37 @@ export default function NodeDetail() {
         <p className="detail-remark">{node.public_remark.trim()}</p>
       ) : null}
 
+      <div className="detail-live-grid">
+        {liveCards.map((card) => (
+          <Tile key={card.key} className="detail-metric-card">
+            <div className="detail-metric-card__top row-between">
+              <span className="detail-metric-card__label">{card.label}</span>
+              {card.icon}
+            </div>
+            <div className="detail-metric-card__value-row">
+              <span className="detail-metric-card__value mono">{card.value}</span>
+            </div>
+            {card.bar > 0 && (
+              <div className="detail-metric-card__bar-track">
+                <div
+                  className={`detail-metric-card__bar-fill${card.bar >= 90 ? " is-warn" : ""}${card.bar >= 98 ? " is-error" : ""}`}
+                  style={{ width: `${Math.min(100, card.bar)}%` }}
+                />
+              </div>
+            )}
+            {card.hint ? (
+              <span className="detail-metric-card__hint mono">{card.hint}</span>
+            ) : null}
+          </Tile>
+        ))}
+      </div>
+
       <div className="detail-finance-grid">
         {financeCards.map((card) => (
           <Tile key={card.key} className="detail-metric-card">
             <div className="detail-metric-card__top row-between">
               <span className="detail-metric-card__label">{card.label}</span>
-              <card.Icon size={20} className="detail-metric-card__icon" />
+              <card.Icon size={16} className="detail-metric-card__icon" />
             </div>
             <div className="detail-metric-card__value-row">
               <span className="detail-metric-card__value mono">{card.value}</span>
@@ -292,7 +354,20 @@ export default function NodeDetail() {
                   {item.icon}
                   <span>{item.label}</span>
                 </div>
-                <div className="detail-info-cell__value mono">{item.value}</div>
+                <div className="detail-info-cell__value mono">
+                  {item.value}
+                  {item.sub ? (
+                    <span className="detail-info-cell__sub"> {item.sub}</span>
+                  ) : null}
+                </div>
+                {item.pct > 0 && (
+                  <div className="detail-info-cell__bar-track">
+                    <div
+                      className={`detail-info-cell__bar-fill${item.pct >= 90 ? " is-warn" : ""}${item.pct >= 98 ? " is-error" : ""}`}
+                      style={{ width: `${Math.min(100, item.pct)}%` }}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -319,7 +394,7 @@ export default function NodeDetail() {
               ) : null}
               <div className="detail-info-cell__body">
                 <div className="detail-info-cell__label">
-                  <DataBase size={14} />
+                  <DataBase size={16} />
                   <span>{t("metrics.traffic")}</span>
                   {metrics ? (
                     <span className="detail-traffic-ud mono">
@@ -343,7 +418,7 @@ export default function NodeDetail() {
             </div>
             <div className="detail-info-cell">
               <div className="detail-info-cell__label">
-                <ArrowUp size={14} />
+                <ArrowUp size={16} />
                 <span>{t("metrics.rate")}</span>
               </div>
               <div className="detail-info-cell__value mono rate-pair">

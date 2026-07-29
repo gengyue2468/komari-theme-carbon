@@ -24,7 +24,7 @@ import {
   trafficUsedBytes,
 } from "~/lib/format";
 import { getArchIcon, getOsIcon } from "~/lib/os-arch";
-import { cardPingFromMetrics } from "~/lib/ping-display";
+import { pickThreeNetworks } from "~/lib/ping-display";
 import type { NodeInfo, RealtimeMetrics } from "~/types/komari";
 
 interface NodeTableProps {
@@ -133,7 +133,7 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
           _netDown: m ? formatRate(m.network.down) : "—",
           _uptime: formatUptime(m?.uptime ?? 0),
           _price: price,
-          _ping: cardPingFromMetrics(m),
+          _threeNets: pickThreeNetworks(m?.ping),
         };
       }),
     [nodes, onlineSet, realtime, t],
@@ -311,13 +311,13 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
 
                       <TableCell>
                         <div className="table-isp-cell">
-                          {d._ping.networks.map((net) => (
+                          {d._threeNets.map((net) => (
                             <span
-                              key={net.name}
+                              key={net.category}
                               className="table-isp-cell__line mono"
                             >
                               <span className="table-isp-cell__name">
-                                {net.name}
+                                {net.category === "CT" ? t("metrics.ct") : net.category === "CU" ? t("metrics.cu") : t("metrics.cm")}
                               </span>
                               <span className="table-isp-cell__val">
                                 {net.latencyMs != null

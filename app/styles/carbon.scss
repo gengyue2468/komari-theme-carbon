@@ -238,6 +238,8 @@ body {
   align-items: stretch;
   gap: $spacing-05;
   width: 100%;
+  min-height: 20rem;
+  height: 20rem;
 }
 
 .home-header__left,
@@ -281,7 +283,6 @@ body {
 .node-map--placeholder {
   background: $layer-01;
   border: 1px solid $border-subtle-01;
-  min-height: 12rem;
 }
 
 .node-map__head {
@@ -434,8 +435,6 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-
 
 /* Ocean = layer-01; land = stronger blue tint for contrast */
 .node-map__land {
@@ -595,8 +594,13 @@ body {
 }
 
 .finance-panel__dropdown {
-  max-width: 7rem;
-  min-width: 5.5rem;
+  width: 7rem;
+}
+
+.finance-panel__dropdown .cds--list-box__label {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .finance-panel__rates {
@@ -712,8 +716,12 @@ body {
   border-radius: 1px;
   min-width: 0.15rem;
 }
-.stat-popover__bar-fill.is-warn { background: $support-warning; }
-.stat-popover__bar-fill.is-error { background: $support-error; }
+.stat-popover__bar-fill.is-warn {
+  background: $support-warning;
+}
+.stat-popover__bar-fill.is-error {
+  background: $support-error;
+}
 
 .home-stat-card__top {
   align-items: flex-start;
@@ -757,6 +765,8 @@ body {
   .home-header {
     flex-direction: column;
     align-items: stretch;
+    height: auto;
+    min-height: 0;
   }
 
   .home-header__left,
@@ -870,11 +880,15 @@ body {
 }
 
 @media (max-width: 66rem) {
-  .node-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .node-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 42rem) {
-  .node-grid { grid-template-columns: 1fr; }
+  .node-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Node card: Carbon-native structured tile ── */
@@ -1064,8 +1078,12 @@ body {
   transition: width 0.3s ease;
 }
 
-.card-bar__fill--warn { background: $support-warning; }
-.card-bar__fill--error { background: $support-error; }
+.card-bar__fill--warn {
+  background: $support-warning;
+}
+.card-bar__fill--error {
+  background: $support-error;
+}
 
 /* --- Row (label … value) --- */
 
@@ -1105,10 +1123,14 @@ body {
   gap: $spacing-02;
 }
 
-.card-rate__up { color: $interactive; }
+.card-rate__up {
+  color: $interactive;
+}
 
 /* Purple — distinct from interactive blue (was support-info, too close) */
-.card-rate__down { color: #8a3ffc; }
+.card-rate__down {
+  color: #8a3ffc;
+}
 
 html[data-carbon-theme="g100"] .card-rate__down {
   color: #a56eff;
@@ -1119,6 +1141,7 @@ html[data-carbon-theme="g100"] .card-rate__down {
 .card-isp {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
   column-gap: $spacing-04;
   row-gap: $spacing-01;
   @include type-style("body-compact-01");
@@ -1132,7 +1155,9 @@ html[data-carbon-theme="g100"] .card-rate__down {
 
 .card-isp__sep {
   color: $border-subtle-01;
-  &::before { content: "|"; }
+  &::before {
+    content: "|";
+  }
 }
 
 /* --- Sparkline grid --- */
@@ -1167,12 +1192,25 @@ html[data-carbon-theme="g100"] .card-rate__down {
   background: $layer-accent-01;
 }
 
-.card-spark__cell.ping-bar__cell--empty { background: $border-subtle-01; opacity: 0.4; }
-.card-spark__cell.ping-bar__cell--good { background: $interactive; }
-.card-spark__cell.ping-bar__cell--ok   { background: color-mix(in srgb, $interactive 70%, $support-warning); }
-.card-spark__cell.ping-bar__cell--fair { background: $support-warning; }
-.card-spark__cell.ping-bar__cell--slow { background: color-mix(in srgb, $support-warning 70%, $support-error); }
-.card-spark__cell.ping-bar__cell--bad  { background: $support-error; }
+.card-spark__cell.ping-bar__cell--empty {
+  background: $border-subtle-01;
+  opacity: 0.4;
+}
+.card-spark__cell.ping-bar__cell--good {
+  background: $interactive;
+}
+.card-spark__cell.ping-bar__cell--ok {
+  background: color-mix(in srgb, $interactive 70%, $support-warning);
+}
+.card-spark__cell.ping-bar__cell--fair {
+  background: $support-warning;
+}
+.card-spark__cell.ping-bar__cell--slow {
+  background: color-mix(in srgb, $support-warning 70%, $support-error);
+}
+.card-spark__cell.ping-bar__cell--bad {
+  background: $support-error;
+}
 
 /* --- Tags --- */
 
@@ -1430,7 +1468,6 @@ html[data-carbon-theme="g100"] .table-rate__down {
 
 .detail-metric-card__icon {
   color: $icon-secondary;
-  opacity: 0.45;
 }
 
 .detail-metric-card__value-row {
@@ -1451,6 +1488,42 @@ html[data-carbon-theme="g100"] .table-rate__down {
 .detail-metric-card__unit {
   @include type-style("label-01");
   color: $text-secondary;
+}
+
+.detail-metric-card__bar-track {
+  width: 100%;
+  height: 0.25rem;
+  background: $layer-accent-01;
+  border-radius: 1px;
+  margin-top: $spacing-01;
+}
+
+.detail-metric-card__bar-fill {
+  height: 100%;
+  background: $interactive;
+  border-radius: 1px;
+  min-width: 0.15rem;
+}
+.detail-metric-card__bar-fill.is-warn {
+  background: $support-warning;
+}
+.detail-metric-card__bar-fill.is-error {
+  background: $support-error;
+}
+
+.detail-metric-card__hint {
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Live snapshot grid — same card size as finance */
+.detail-live-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: $spacing-05;
 }
 
 .detail-info-grid {
@@ -1516,6 +1589,32 @@ html[data-carbon-theme="g100"] .table-rate__down {
 .detail-info-cell__value {
   @include type-style("body-compact-01");
   word-break: break-word;
+}
+
+.detail-info-cell__sub {
+  @include type-style("helper-text-01");
+  color: $text-secondary;
+}
+
+.detail-info-cell__bar-track {
+  width: 100%;
+  height: 0.2rem;
+  background: $layer-accent-01;
+  border-radius: 1px;
+  margin-top: $spacing-01;
+}
+
+.detail-info-cell__bar-fill {
+  height: 100%;
+  background: $interactive;
+  border-radius: 1px;
+  min-width: 0.15rem;
+}
+.detail-info-cell__bar-fill.is-warn {
+  background: $support-warning;
+}
+.detail-info-cell__bar-fill.is-error {
+  background: $support-error;
 }
 
 .detail-info-cell__body {
@@ -2038,6 +2137,21 @@ html[data-carbon-theme="g100"] .rate-pair__down {
   /* finance popover */
   .finance-popover__content {
     width: min(18rem, 92vw);
+  }
+
+  /* detail live & finance grids -> 2-col */
+  .detail-live-grid,
+  .detail-finance-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-info-grid {
+    grid-template-columns: 1fr;
+    gap: $spacing-04;
+  }
+
+  .detail-network-grid {
+    grid-template-columns: 1fr;
   }
 
   /* section titles */

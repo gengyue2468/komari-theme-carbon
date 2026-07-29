@@ -1,5 +1,5 @@
 import type { CarbonIconType } from "@carbon/icons-react";
-import { Chip, Terminal } from "@carbon/icons-react";
+import { Chip, ContainerSoftware, Terminal, VirtualMachine } from "@carbon/icons-react";
 
 export type IconRef =
   | { kind: "carbon"; Icon: CarbonIconType }
@@ -20,7 +20,7 @@ export function getArchIcon(arch: string, cpuName = ""): { icon: IconRef; label:
     cpu.includes("threadripper") ||
     cpu.includes("athlon")
   )
-    return { icon: { kind: "iconify", id: "simple-icons:amd" }, label };
+    return { icon: { kind: "iconify", id: "bi:amd" }, label };
   if (
     cpu.includes("intel") ||
     cpu.includes("xeon") ||
@@ -40,7 +40,7 @@ export function getArchIcon(arch: string, cpuName = ""): { icon: IconRef; label:
   )
     return { icon: { kind: "iconify", id: "simple-icons:arm" }, label };
   if (a.includes("amd64") || a.includes("x86_64") || a.includes("x64"))
-    return { icon: { kind: "iconify", id: "simple-icons:amd" }, label };
+    return { icon: { kind: "iconify", id: "bi:amd" }, label };
   if (a.includes("i386") || a.includes("i686") || a === "x86")
     return { icon: { kind: "iconify", id: "simple-icons:intel" }, label };
 
@@ -87,22 +87,17 @@ export function getVirtIcon(virt: string): { icon: IconRef; label: string } {
 
   if (!s || s === "none" || s === "physical" || s === "baremetal" || s === "bare-metal")
     return { icon: { kind: "carbon", Icon: Chip }, label: raw || "Physical" };
-  if (s.includes("docker"))
-    return { icon: { kind: "iconify", id: "simple-icons:docker" }, label: "Docker" };
-  if (s.includes("podman"))
-    return { icon: { kind: "iconify", id: "simple-icons:podman" }, label: "Podman" };
-  if (s.includes("lxc") || s.includes("lxd") || s.includes("linux container"))
-    return { icon: { kind: "iconify", id: "simple-icons:linuxcontainers" }, label: "LXC" };
-  if (s.includes("proxmox"))
-    return { icon: { kind: "iconify", id: "simple-icons:proxmox" }, label: "Proxmox" };
-  if (s.includes("qemu") || s.includes("kvm"))
-    return { icon: { kind: "iconify", id: "simple-icons:qemu" }, label: s.includes("kvm") ? "KVM" : "QEMU" };
-  if (s.includes("vmware") || s.includes("esxi"))
-    return { icon: { kind: "iconify", id: "simple-icons:vmware" }, label: "VMware" };
-  if (s.includes("virtualbox") || s.includes("vbox"))
-    return { icon: { kind: "iconify", id: "simple-icons:virtualbox" }, label: "VirtualBox" };
-  if (s.includes("xen") || s.includes("openvz"))
-    return { icon: { kind: "iconify", id: "simple-icons:qemu" }, label: s.includes("xen") ? "Xen" : "OpenVZ" };
+
+  // Container-based
+  if (s.includes("docker") || s.includes("podman") || s.includes("lxc") || s.includes("lxd") || s.includes("linux container"))
+    return { icon: { kind: "carbon", Icon: ContainerSoftware }, label: s.includes("docker") ? "Docker" : s.includes("podman") ? "Podman" : "LXC" };
+
+  // VM-based
+  if (s.includes("proxmox") || s.includes("qemu") || s.includes("kvm") || s.includes("vmware") || s.includes("esxi") || s.includes("virtualbox") || s.includes("vbox") || s.includes("xen") || s.includes("openvz") || s.includes("microsoft") || s.includes("hyperv") || s.includes("hyper-v"))
+    return {
+      icon: { kind: "carbon", Icon: VirtualMachine },
+      label: s.includes("kvm") ? "KVM" : s.includes("qemu") ? "QEMU" : s.includes("vmware") ? "VMware" : s.includes("virtualbox") ? "VirtualBox" : s.includes("xen") ? "Xen" : s.includes("openvz") ? "OpenVZ" : s.includes("hyperv") ? "Hyper-V" : "Proxmox",
+    };
 
   return { icon: { kind: "carbon", Icon: Chip }, label: raw || "virt" };
 }

@@ -26,6 +26,68 @@ export function networksFromLivePing(
   }));
 }
 
+/**
+ * Chinese ISP category: 电信 (CT) / 联通 (CU) / 移动 (CM).
+ * Matches by keyword in the task name.
+ */
+export type IspCategory = "CT" | "CU" | "CM";
+
+export function categorizeIsp(name: string): IspCategory | null {
+  const s = name.toLowerCase();
+  if (
+    s.includes("电信") ||
+    s.includes("telecom") ||
+    s.includes("ct") ||
+    s.includes("chinatelecom")
+  )
+    return "CT";
+  if (
+    s.includes("联通") ||
+    s.includes("unicom") ||
+    s.includes("cu") ||
+    s.includes("chinaunicom")
+  )
+    return "CU";
+  if (
+    s.includes("移动") ||
+    s.includes("mobile") ||
+    s.includes("cm") ||
+    s.includes("chinamobile")
+  )
+    return "CM";
+  return null;
+}
+
+/**
+ * Pick the best (lowest latency) task for each ISP category.
+ * Returns exactly 3 entries: CT, CU, CM (in that order).
+ * Missing categories get latencyMs = null.
+ */
+export function pickThreeNetworks(
+  ping?: Record<string, NodePingLive>,
+): { category: IspCategory; latencyMs: number | null; name: string }[] {
+  if (!ping) return [];
+  const best: Record<string, { latencyMs: number; name: string } | null> = {
+    CT: null,
+    CU: null,
+    CM: null,
+  };
+  for (const p of Object.values(ping)) {
+    const cat = categorizeIsp(p.name);
+    if (!cat) continue;
+    const lat = p.latest >= 0 ? Math.round(p.latest) : null;
+    if (lat == null) continue;
+    if (!best[cat] || lat < best[cat]!.latencyMs) {
+      best[cat] = { latencyMs: lat, name: p.name };
+    }
+  }
+  return (["CT", "CU", "CM"] as IspCategory[]).map((category) => ({
+    category,
+    latencyMs: best[category]?.latencyMs ?? null,
+    name: best[category]?.name ?? "",
+  }));
+}
+
 const SPARK_SLOTS = 12;
 
 /**

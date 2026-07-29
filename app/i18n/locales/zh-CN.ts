@@ -46,6 +46,12 @@ export default {
     latency: "延迟",
     loss: "丢包",
     gpu: "GPU",
+    ct: "电信",
+    cu: "联通",
+    cm: "移动",
+    telecom: "电信",
+    unicom: "联通",
+    mobile: "移动",
   },
   stats: {
     memory: "内存用量",

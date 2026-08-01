@@ -1,16 +1,21 @@
-import { Tab, TabList, Tabs, Tile } from "@carbon/react";
+import { Modal, Tab, TabList, Tabs, Tile } from "@carbon/react";
 import { AreaChart, LineChart } from "@carbon/charts-react";
 import {
   Alignments,
   ScaleTypes,
   type AreaChartOptions,
   type LineChartOptions,
+  type Locale,
 } from "@carbon/charts";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dataSource } from "~/api/datasource";
 import { PageSpinner } from "~/components/PageSpinner";
+import {
+  buildChartLocale,
+  makeTooltipValueFormatter,
+} from "~/lib/chart-i18n";
 import {
   formatBytes,
   formatRate,
@@ -45,6 +50,26 @@ function filterLoadRanges(preserveHours: number) {
   return RANGES.filter((r) => r.key === "live" || r.hours <= maxH);
 }
 
+const CHART_RANGE_KEY = "komari-carbon-load-range";
+
+function readStoredRange(fallback: RangeKey): RangeKey {
+  try {
+    const v = localStorage.getItem(CHART_RANGE_KEY);
+    if (v === "live" || v === "4h" || v === "1d") return v;
+  } catch {
+    // ignore
+  }
+  return fallback;
+}
+
+function writeStoredRange(range: RangeKey) {
+  try {
+    localStorage.setItem(CHART_RANGE_KEY, range);
+  } catch {
+    // ignore
+  }
+}
+
 function downsample(records: LoadRecord[], maxPoints: number): LoadRecord[] {
   if (records.length <= maxPoints) return records;
   const step = Math.ceil(records.length / maxPoints);
@@ -59,6 +84,8 @@ function baseChartOptions(
   theme: "g10" | "g100",
   domain?: [number, number],
   yTitle = "",
+  locale?: Locale,
+  timeTitle = "",
 ): LineChartOptions {
   return {
     title: "",
@@ -67,6 +94,7 @@ function baseChartOptions(
         mapsTo: "date",
         scaleType: ScaleTypes.TIME,
         ticks: { number: 8 },
+        title: timeTitle,
       },
       left: {
         mapsTo: "value",
@@ -82,6 +110,7 @@ function baseChartOptions(
     legend: { enabled: false },
     grid: { x: { enabled: false }, y: { enabled: true } },
     points: { enabled: false, radius: 0 },
+    ...(locale ? { locale } : {}),
     // Only keys that exist in data.group — extra keys spam console warnings
     color: {
       scale: {
@@ -91,21 +120,45 @@ function baseChartOptions(
   };
 }
 
+type MetricId =
+  | "cpu"
+  | "ram"
+  | "disk"
+  | "network"
+  | "connections"
+  | "process";
+
+interface MetricChartData {
+  title: string;
+  meta?: string;
+  data: ChartPoint[];
+  options: LineChartOptions | AreaChartOptions;
+  kind: "area" | "line";
+}
+
+/** Whole card is the trigger — click anywhere to open the enlarged dialog. */
 function MetricChart({
   title,
   meta,
   data,
   options,
   kind = "line",
-}: {
-  title: string;
-  meta?: string;
-  data: ChartPoint[];
-  options: LineChartOptions | AreaChartOptions;
-  kind?: "line" | "area";
-}) {
+  onOpen,
+}: MetricChartData & { onOpen: () => void }) {
   return (
-    <Tile className="load-chart-card">
+    <Tile
+      className="load-chart-card"
+      role="button"
+      tabIndex={0}
+      aria-label={title}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+    >
       <div className="load-chart-card__head">
         <span className="load-chart-card__title">{title}</span>
         {meta ? <span className="load-chart-card__meta mono">{meta}</span> : null}
@@ -123,10 +176,58 @@ function MetricChart({
   );
 }
 
+/** Reused by both the main toolbar and the enlarge dialog (kept in sync). */
+function LoadRangeTabs({
+  index,
+  ranges,
+  labelMap,
+  ariaLabel,
+  onChange,
+}: {
+  index: number;
+  ranges: Array<{ key: RangeKey; hours: number }>;
+  labelMap: Record<RangeKey, string>;
+  ariaLabel: string;
+  onChange: (key: RangeKey) => void;
+}) {
+  return (
+    <Tabs
+      selectedIndex={index}
+      onChange={({ selectedIndex }) => {
+        onChange(ranges[selectedIndex]?.key ?? "live");
+      }}
+    >
+      <TabList
+        aria-label={ariaLabel}
+        contained
+        scrollIntoView
+        className="chart-range-tabs"
+      >
+        {ranges.map((r) => (
+          <Tab key={r.key}>{labelMap[r.key]}</Tab>
+        ))}
+      </TabList>
+    </Tabs>
+  );
+}
+
 export function LoadChart({ uuid }: LoadChartProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const carbonTheme = useAppearanceStore((s) => s.carbonTheme);
   const theme = carbonTheme === "g100" ? "g100" : "g10";
+  const chartLocale = useMemo(
+    () =>
+      buildChartLocale(i18n.language, {
+        group: t("chart.group"),
+        total: t("chart.total"),
+      }),
+    [i18n.language, t],
+  );
+  const timeTitle = t("chart.time");
+  const intlNumber = useMemo(
+    () => new Intl.NumberFormat(i18n.language),
+    [i18n.language],
+  );
   const preserve = useNodesStore(
     (s) => s.publicSettings?.record_preserve_time ?? 24,
   );
@@ -150,7 +251,19 @@ export function LoadChart({ uuid }: LoadChartProps) {
     return "live";
   }, [chartHours, availableRanges]);
 
-  const [range, setRange] = useState<RangeKey>(initialRange);
+  const [range, setRange] = useState<RangeKey>(() => {
+    // Prefer the remembered choice (like the home grid/list toggle); fall back
+    // to the settings-derived default when nothing is stored / not available.
+    const stored = readStoredRange(initialRange);
+    return availableRanges.some((r) => r.key === stored)
+      ? stored
+      : initialRange;
+  });
+  const changeRange = (key: RangeKey) => {
+    setRange(key);
+    writeStoredRange(key);
+  };
+  const [dialogMetric, setDialogMetric] = useState<MetricId | null>(null);
   const pollMs = useNodesStore((s) => s.pollIntervalMs);
 
   const hours =
@@ -166,7 +279,9 @@ export function LoadChart({ uuid }: LoadChartProps) {
 
   useEffect(() => {
     if (!availableRanges.some((r) => r.key === range)) {
-      setRange(availableRanges[0]?.key ?? "live");
+      const next = availableRanges[0]?.key ?? "live";
+      setRange(next);
+      writeStoredRange(next);
     }
   }, [availableRanges, range]);
 
@@ -212,39 +327,36 @@ export function LoadChart({ uuid }: LoadChartProps) {
   ]);
   const latest = series[series.length - 1];
 
-  const pctAreaOpts = useMemo<AreaChartOptions>(
-    () => ({ ...baseChartOptions(theme, [0, 100], "%") }),
-    [theme],
-  );
-
+  // Single-series charts name their group by the localized metric so tooltips
+  // read "Series: CPU" instead of "Series: primary".
   const cpuData = useMemo<ChartPoint[]>(
     () =>
       series.map((r) => ({
-        group: "primary",
+        group: t("metrics.cpu"),
         date: new Date(r.time),
         value: Number(r.cpu.toFixed(2)),
       })),
-    [series],
+    [series, t],
   );
 
   const ramData = useMemo<ChartPoint[]>(
     () =>
       series.map((r) => ({
-        group: "primary",
+        group: t("metrics.ram"),
         date: new Date(r.time),
         value: Number(percentOf(r.ram, r.ram_total).toFixed(2)),
       })),
-    [series],
+    [series, t],
   );
 
   const diskData = useMemo<ChartPoint[]>(
     () =>
       series.map((r) => ({
-        group: "primary",
+        group: t("metrics.disk"),
         date: new Date(r.time),
         value: Number(percentOf(r.disk, r.disk_total).toFixed(2)),
       })),
-    [series],
+    [series, t],
   );
 
   const netData = useMemo<ChartPoint[]>(() => {
@@ -278,26 +390,108 @@ export function LoadChart({ uuid }: LoadChartProps) {
   const procData = useMemo<ChartPoint[]>(
     () =>
       series.map((r) => ({
-        group: "primary",
+        group: t("metrics.process"),
         date: new Date(r.time),
         value: r.process,
       })),
-    [series],
+    [series, t],
+  );
+
+  const language = i18n.language;
+  const pctFormatter = useMemo(
+    () => makeTooltipValueFormatter(language, (v) => `${v}%`),
+    [language],
+  );
+  const rateFormatter = useMemo(
+    () => makeTooltipValueFormatter(language, (v) => formatRate(v)),
+    [language],
+  );
+  const countFormatter = useMemo(
+    () => makeTooltipValueFormatter(language, (v) => intlNumber.format(v)),
+    [language, intlNumber],
+  );
+
+  const cpuOpts = useMemo<AreaChartOptions>(
+    () => ({
+      ...baseChartOptions(
+        theme,
+        [0, 100],
+        t("metrics.cpu"),
+        chartLocale,
+        timeTitle,
+      ),
+      color: { scale: { [t("metrics.cpu")]: "var(--cds-interactive)" } },
+      tooltip: { valueFormatter: pctFormatter },
+    }),
+    [theme, chartLocale, t, timeTitle, pctFormatter],
+  );
+
+  const ramOpts = useMemo<AreaChartOptions>(
+    () => ({
+      ...baseChartOptions(
+        theme,
+        [0, 100],
+        t("metrics.ram"),
+        chartLocale,
+        timeTitle,
+      ),
+      color: { scale: { [t("metrics.ram")]: "var(--cds-interactive)" } },
+      tooltip: { valueFormatter: pctFormatter },
+    }),
+    [theme, chartLocale, t, timeTitle, pctFormatter],
+  );
+
+  const diskOpts = useMemo<AreaChartOptions>(
+    () => ({
+      ...baseChartOptions(
+        theme,
+        [0, 100],
+        t("metrics.disk"),
+        chartLocale,
+        timeTitle,
+      ),
+      color: { scale: { [t("metrics.disk")]: "var(--cds-interactive)" } },
+      tooltip: { valueFormatter: pctFormatter },
+    }),
+    [theme, chartLocale, t, timeTitle, pctFormatter],
+  );
+
+  const procOpts = useMemo<AreaChartOptions>(
+    () => ({
+      ...baseChartOptions(
+        theme,
+        undefined,
+        t("metrics.process"),
+        chartLocale,
+        timeTitle,
+      ),
+      color: { scale: { [t("metrics.process")]: "var(--cds-interactive)" } },
+      tooltip: { valueFormatter: countFormatter },
+    }),
+    [theme, chartLocale, t, timeTitle, countFormatter],
   );
 
   const netOpts = useMemo<LineChartOptions>(
     () => ({
-      ...baseChartOptions(theme),
+      ...baseChartOptions(
+        theme,
+        undefined,
+        t("metrics.rate"),
+        chartLocale,
+        timeTitle,
+      ),
       axes: {
         bottom: {
           mapsTo: "date",
           scaleType: ScaleTypes.TIME,
           ticks: { number: 8 },
+          title: timeTitle,
         },
         left: {
           mapsTo: "value",
           scaleType: ScaleTypes.LINEAR,
           includeZero: true,
+          title: t("metrics.rate"),
           ticks: {
             formatter: (tick: number | Date) =>
               `${formatRate(Number(tick))}`,
@@ -316,13 +510,34 @@ export function LoadChart({ uuid }: LoadChartProps) {
           [t("metrics.download")]: COLOR_DOWN,
         },
       },
+      tooltip: { valueFormatter: rateFormatter },
     }),
-    [theme, t],
+    [theme, chartLocale, t, timeTitle, rateFormatter],
   );
 
   const connOpts = useMemo<LineChartOptions>(
     () => ({
-      ...baseChartOptions(theme),
+      ...baseChartOptions(
+        theme,
+        undefined,
+        t("metrics.connections"),
+        chartLocale,
+        timeTitle,
+      ),
+      axes: {
+        bottom: {
+          mapsTo: "date",
+          scaleType: ScaleTypes.TIME,
+          ticks: { number: 8 },
+          title: timeTitle,
+        },
+        left: {
+          mapsTo: "value",
+          scaleType: ScaleTypes.LINEAR,
+          includeZero: true,
+          title: t("metrics.connections"),
+        },
+      },
       height: "200px",
       legend: {
         enabled: true,
@@ -335,21 +550,9 @@ export function LoadChart({ uuid }: LoadChartProps) {
           UDP: COLOR_DOWN,
         },
       },
+      tooltip: { valueFormatter: countFormatter },
     }),
-    [theme],
-  );
-
-  const areaOpts = useMemo<AreaChartOptions>(
-    () => ({
-      ...baseChartOptions(theme),
-      legend: { enabled: false },
-      color: {
-        scale: {
-          primary: "var(--cds-interactive)",
-        },
-      },
-    }),
-    [theme],
+    [theme, chartLocale, t, timeTitle, countFormatter],
   );
 
   const labelMap = useMemo(
@@ -362,26 +565,71 @@ export function LoadChart({ uuid }: LoadChartProps) {
     [t],
   );
 
+  const metricCharts: Record<MetricId, MetricChartData> = {
+    cpu: {
+      title: t("metrics.cpu"),
+      meta: latest ? `${latest.cpu.toFixed(1)}%` : undefined,
+      data: cpuData,
+      options: cpuOpts,
+      kind: "area",
+    },
+    ram: {
+      title: t("metrics.ram"),
+      meta: latest
+        ? `${formatBytes(latest.ram)} · ${formatBytes(latest.ram_total)}`
+        : undefined,
+      data: ramData,
+      options: ramOpts,
+      kind: "area",
+    },
+    disk: {
+      title: t("metrics.disk"),
+      meta: latest
+        ? `${formatBytes(latest.disk)} · ${formatBytes(latest.disk_total)}`
+        : undefined,
+      data: diskData,
+      options: diskOpts,
+      kind: "area",
+    },
+    network: {
+      title: t("metrics.network"),
+      meta: latest
+        ? `${formatRate(latest.net_out)} ↑ · ${formatRate(latest.net_in)} ↓`
+        : undefined,
+      data: netData,
+      options: netOpts,
+      kind: "line",
+    },
+    connections: {
+      title: t("metrics.connections"),
+      meta: latest
+        ? `TCP ${latest.connections} · UDP ${latest.connections_udp}`
+        : undefined,
+      data: connData,
+      options: connOpts,
+      kind: "line",
+    },
+    process: {
+      title: t("metrics.process"),
+      meta: latest ? String(Math.round(latest.process)) : undefined,
+      data: procData,
+      options: procOpts,
+      kind: "area",
+    },
+  };
+
+  const dialogChart = dialogMetric ? metricCharts[dialogMetric] : null;
+
   return (
     <div className="load-chart-panel">
       <div className="load-chart-panel__toolbar">
-        <Tabs
-          selectedIndex={rangeIndex}
-          onChange={({ selectedIndex: index }) => {
-            setRange(availableRanges[index]?.key ?? "live");
-          }}
-        >
-          <TabList
-            aria-label={t("detail.loadChart")}
-            contained
-            scrollIntoView
-            className="chart-range-tabs"
-          >
-            {availableRanges.map((r) => (
-              <Tab key={r.key}>{labelMap[r.key]}</Tab>
-            ))}
-          </TabList>
-        </Tabs>
+        <LoadRangeTabs
+          index={rangeIndex}
+          ranges={availableRanges}
+          labelMap={labelMap}
+          ariaLabel={t("detail.loadChart")}
+          onChange={changeRange}
+        />
       </div>
 
       {loading ? (
@@ -390,64 +638,63 @@ export function LoadChart({ uuid }: LoadChartProps) {
         <p className="empty">{t("detail.noLoadData")}</p>
       ) : (
         <div className="load-chart-grid">
-          <MetricChart
-            title={t("metrics.cpu")}
-            meta={latest ? `${latest.cpu.toFixed(1)}%` : undefined}
-            data={cpuData}
-            options={pctAreaOpts}
-            kind="area"
-          />
-          <MetricChart
-            title={t("metrics.ram")}
-            meta={
-              latest
-                ? `${formatBytes(latest.ram)} · ${formatBytes(latest.ram_total)}`
-                : undefined
-            }
-            data={ramData}
-            options={pctAreaOpts}
-            kind="area"
-          />
-          <MetricChart
-            title={t("metrics.disk")}
-            meta={
-              latest
-                ? `${formatBytes(latest.disk)} · ${formatBytes(latest.disk_total)}`
-                : undefined
-            }
-            data={diskData}
-            options={pctAreaOpts}
-            kind="area"
-          />
-          <MetricChart
-            title={t("metrics.network")}
-            meta={
-              latest
-                ? `${formatRate(latest.net_out)} ↑ · ${formatRate(latest.net_in)} ↓`
-                : undefined
-            }
-            data={netData}
-            options={netOpts}
-          />
-          <MetricChart
-            title={t("metrics.connections")}
-            meta={
-              latest
-                ? `TCP ${latest.connections} · UDP ${latest.connections_udp}`
-                : undefined
-            }
-            data={connData}
-            options={connOpts}
-          />
-          <MetricChart
-            title={t("metrics.process")}
-            meta={latest ? String(Math.round(latest.process)) : undefined}
-            data={procData}
-            options={areaOpts}
-            kind="area"
-          />
+          {(Object.keys(metricCharts) as MetricId[]).map((id) => (
+            <MetricChart
+              key={id}
+              {...metricCharts[id]}
+              onOpen={() => setDialogMetric(id)}
+            />
+          ))}
         </div>
       )}
+
+      {dialogChart ? (
+        <Modal
+          open
+          passiveModal
+          size="lg"
+          modalHeading={dialogChart.title}
+          onRequestClose={() => setDialogMetric(null)}
+          className="load-chart-dialog"
+        >
+          <div className="load-chart-dialog__toolbar">
+            <LoadRangeTabs
+              index={rangeIndex}
+              ranges={availableRanges}
+              labelMap={labelMap}
+              ariaLabel={t("detail.loadChart")}
+              onChange={changeRange}
+            />
+          </div>
+          <div className="load-chart-dialog__chart">
+            {loading ? (
+              <PageSpinner />
+            ) : dialogChart.data.length === 0 ? (
+              <div className="load-chart-card__empty">—</div>
+            ) : dialogChart.kind === "area" ? (
+              <AreaChart
+                data={dialogChart.data}
+                options={
+                  {
+                    ...dialogChart.options,
+                    height: "360px",
+                  } as AreaChartOptions
+                }
+              />
+            ) : (
+              <LineChart
+                data={dialogChart.data}
+                options={
+                  {
+                    ...dialogChart.options,
+                    height: "360px",
+                  } as LineChartOptions
+                }
+              />
+            )}
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }

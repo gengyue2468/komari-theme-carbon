@@ -26,9 +26,6 @@ importers:
       '@ibm/plex':
         specifier: ^6.4.1
         version: 6.4.1
-      '@iconify/react':
-        specifier: ^6.0.2
-        version: 6.0.2(react@19.2.8)
       '@react-router/node':
         specifier: ^8
         version: 8.3.0(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(typescript@5.9.3)
@@ -364,14 +361,6 @@ packages:
   '@ibm/telemetry-js@1.11.0':
     resolution: {integrity: sha512-RO/9j+URJnSfseWg9ZkEX9p+a3Ousd33DBU7rOafoZB08RqdzxFVYJ2/iM50dkBuD0o7WX7GYt1sLbNgCoE+pA==}
     hasBin: true
-
-  '@iconify/react@6.0.2':
-    resolution: {integrity: sha512-SMmC2sactfpJD427WJEDN6PMyznTFMhByK9yLW0gOTtnjzzbsi/Ke/XqsumsavFPwNiXs8jSiYeZTmLCLwO+Fg==}
-    peerDependencies:
-      react: '>=16'
-
-  '@iconify/types@2.0.0':
-    resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
 
   '@internationalized/number@3.6.7':
     resolution: {integrity: sha512-3ji1fcrT+FPAK86UqEhB/psHixYo6niWPJtt7+qRaYFynt/BaJG8GhAPimtWUpEiVSTq8ZM8L5psMxGquiB/Vg==}
@@ -2543,13 +2532,6 @@ snapshots:
       '@ibm/telemetry-js': 1.11.0
 
   '@ibm/telemetry-js@1.11.0': {}
-
-  '@iconify/react@6.0.2(react@19.2.8)':
-    dependencies:
-      '@iconify/types': 2.0.0
-      react: 19.2.8
-
-  '@iconify/types@2.0.0': {}
 
   '@internationalized/number@3.6.7':
     dependencies:

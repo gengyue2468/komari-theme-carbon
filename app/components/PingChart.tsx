@@ -11,6 +11,10 @@ import { useTranslation } from "react-i18next";
 import { dataSource } from "~/api/datasource";
 import { buildPingChartModel } from "~/lib/ping-display";
 import { PageSpinner } from "~/components/PageSpinner";
+import {
+  buildChartLocale,
+  makeTooltipValueFormatter,
+} from "~/lib/chart-i18n";
 import { queryKeys } from "~/lib/query-client";
 import { useAppearanceStore } from "~/stores/appearance";
 import { useNodesStore } from "~/stores/nodes";
@@ -36,9 +40,17 @@ const RANGES: Array<{ key: RangeKey; hours: number }> = [
 ];
 
 export function PingChart({ uuid, online }: PingChartProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const carbonTheme = useAppearanceStore((s) => s.carbonTheme);
   const theme = carbonTheme === "g100" ? "g100" : "g10";
+  const chartLocale = useMemo(
+    () =>
+      buildChartLocale(i18n.language, {
+        group: t("chart.group"),
+        total: t("chart.total"),
+      }),
+    [i18n.language, t],
+  );
   const preserve = useNodesStore(
     (s) => s.publicSettings?.ping_record_preserve_time ?? 48,
   );
@@ -83,9 +95,11 @@ export function PingChart({ uuid, online }: PingChartProps) {
     // No placeholderData: tab switch must refetch immediately, not keep old range
   });
 
-  const tasks = pingQuery.isFetching ? [] : (pingQuery.data?.tasks ?? []);
-  const points = pingQuery.isFetching ? [] : (pingQuery.data?.points ?? []);
-  const loading = pingQuery.isPending || pingQuery.isFetching;
+  const tasks = pingQuery.data?.tasks ?? [];
+  const points = pingQuery.data?.points ?? [];
+  // Only block on a genuine first load (new range = new query key = no data);
+  // background refetches keep the previous series visible.
+  const loading = pingQuery.isPending;
 
   useEffect(() => {
     if (!availableRanges.some((r) => r.key === range)) {
@@ -133,6 +147,12 @@ export function PingChart({ uuid, online }: PingChartProps) {
     return scale;
   }, [tasks]);
 
+  const language = i18n.language;
+  const msFormatter = useMemo(
+    () => makeTooltipValueFormatter(language, (v) => `${v} ms`),
+    [language],
+  );
+
   const options = useMemo<LineChartOptions>(
     () => ({
       title: "",
@@ -141,11 +161,12 @@ export function PingChart({ uuid, online }: PingChartProps) {
           mapsTo: "date",
           scaleType: ScaleTypes.TIME,
           ticks: { number: 10 },
+          title: t("chart.time"),
         },
         left: {
           mapsTo: "value",
           scaleType: ScaleTypes.LINEAR,
-          title: "ms",
+          title: t("metrics.latency"),
           includeZero: true,
         },
       },
@@ -161,8 +182,23 @@ export function PingChart({ uuid, online }: PingChartProps) {
       grid: { x: { enabled: false }, y: { enabled: true } },
       points: { enabled: false, radius: 0 },
       color: { scale: colorScale },
+      locale: chartLocale,
+      tooltip: {
+        valueFormatter: msFormatter,
+        // Summing ping latencies across different targets is meaningless —
+        // show the average instead of the default "Total".
+        showTotal: true,
+        totalLabel: t("detail.avg"),
+        customTotalCalculation: (data) => {
+          const values = (data as Array<{ value?: unknown }>)
+            .map((d) => d.value)
+            .filter((v): v is number => typeof v === "number");
+          if (values.length === 0) return 0;
+          return values.reduce((a, b) => a + b, 0) / values.length;
+        },
+      },
     }),
-    [theme, colorScale],
+    [theme, colorScale, chartLocale, t, language, msFormatter],
   );
 
   const rangeLabels: Record<RangeKey, string> = {

@@ -20,7 +20,7 @@ export function HomeStatCard({
     <Tile className="home-stat-card">
       <div className="home-stat-card__top row-between">
         <span className="home-stat-card__label">{label}</span>
-        <Icon size={20} className="home-stat-card__icon" />
+        <Icon size={16} className="home-stat-card__icon" />
       </div>
       <div className="home-stat-card__value-row">
         <span className="home-stat-card__value mono">{value}</span>

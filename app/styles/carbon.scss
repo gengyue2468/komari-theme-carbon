@@ -969,7 +969,7 @@ body {
 .brand-icon__glyph {
   display: block;
   flex-shrink: 0;
-  /* Iconify SVGs sometimes paint smaller than box */
+  /* Brand SVGs / Carbon icons sometimes paint smaller than box */
   max-width: 100%;
   max-height: 100%;
 }
@@ -1176,20 +1176,20 @@ html[data-carbon-theme="g100"] .card-rate__down {
 }
 
 .card-spark__track {
-  display: grid;
-  align-items: end;
-  gap: 2px;
-  height: 1.25rem;
+  display: flex;
+  gap: 1px;
+  height: 0.5rem;
+  padding: 1px;
+  border-radius: 2px;
+  background: $layer-accent-01;
 }
 
 .card-spark__cell {
-  display: block;
-  width: 100%;
+  flex: 1 1 0;
+  min-width: 0;
   height: 100%;
-  min-height: 0.25rem;
-  align-self: end;
   border-radius: 1px;
-  background: $layer-accent-01;
+  background: $border-subtle-01;
 }
 
 .card-spark__cell.ping-bar__cell--empty {
@@ -1744,6 +1744,17 @@ html[data-carbon-theme="g100"] .rate-pair__down {
   gap: $spacing-03;
   min-width: 0;
   background: $layer-01;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: $layer-02;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $focus;
+    outline-offset: -2px;
+  }
 }
 
 .load-chart-card__head {
@@ -1786,6 +1797,29 @@ html[data-carbon-theme="g100"] .rate-pair__down {
   color: $text-secondary;
 }
 
+.load-chart-dialog {
+  .cds--modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-05;
+  }
+}
+
+.load-chart-dialog__chart {
+  min-height: 22.5rem;
+  min-width: 0;
+
+  .cds--cc--chart-wrapper,
+  .layout-child {
+    width: 100% !important;
+  }
+
+  /* Spinner fills the reserved chart area and stays vertically centered */
+  .page-spinner {
+    min-height: 100%;
+  }
+}
+
 @media (max-width: 66rem) {
   .load-chart-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1804,6 +1838,13 @@ html[data-carbon-theme="g100"] .rate-pair__down {
   display: flex;
   flex-direction: column;
   gap: $spacing-05;
+}
+
+/* Time axis title ("时间/Time") is obvious — hide it visually but keep it
+   in the accessibility tree (sr-only). Tooltip label still reads the title. */
+.cds--cc--axes g.axis.bottom .axis-title {
+  opacity: 0;
+  font-size: 0;
 }
 
 .ping-chart-panel__toolbar {

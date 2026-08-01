@@ -116,6 +116,11 @@ export default {
     hours: "{{count}} 小时",
     minutes: "{{count}} 分",
   },
+  chart: {
+    group: "系列",
+    total: "合计",
+    time: "时间",
+  },
   appearance: {
     theme: "外观",
     light: "浅色",

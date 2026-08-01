@@ -50,7 +50,6 @@ if (
     "komari-theme.json preview should be a relative path inside the zip (e.g. preview.png).",
   );
 }
-writeFileSync(themeJsonPath, `${JSON.stringify(themeJson, null, 2)}\n`);
 
 const distDir = join(root, "dist");
 rmSync(distDir, { recursive: true, force: true });
@@ -108,7 +107,9 @@ await new Promise((resolve, reject) => {
   //   GET /themes/{short}/{preview}  e.g. /themes/komari-theme-carbon/preview.png
   //   GET /themes/{short}/komari-theme.json
   //   SPA assets under dist/
-  archive.file(themeJsonPath, { name: "komari-theme.json" });
+  archive.append(`${JSON.stringify(themeJson, null, 2)}\n`, {
+    name: "komari-theme.json",
+  });
   archive.file(previewPath, { name: "preview.png" });
   archive.directory(distDir, "dist");
   void archive.finalize();

@@ -110,10 +110,70 @@ export function mapStatusesToSnapshot(
   const online: string[] = [];
   const data: Record<string, RealtimeMetrics> = {};
   for (const [uuid, st] of Object.entries(map)) {
-    data[uuid] = mapStatusToMetrics(st);
+    data[uuid] = mapStatusToMetricsCached(uuid, st);
     if (st.online) online.push(uuid);
   }
   return { online, data };
+}
+
+/**
+ * Cache metrics per node keyed by a fingerprint of the raw status.
+ * When nothing changed, the SAME object reference is returned, which lets
+ * memoized consumers (NodeCard, NodeTable, …) skip re-rendering on quiet
+ * polling ticks.
+ */
+const metricsCache = new Map<
+  string,
+  { fp: string; metrics: RealtimeMetrics }
+>();
+
+function statusFingerprint(s: RpcNodeStatus): string {
+  const parts = [
+    s.time ?? "",
+    s.cpu,
+    s.gpu,
+    s.ram,
+    s.ram_total,
+    s.swap,
+    s.swap_total,
+    s.load,
+    s.load5 ?? "",
+    s.load15 ?? "",
+    s.temp,
+    s.disk,
+    s.disk_total,
+    s.net_in,
+    s.net_out,
+    s.net_total_up,
+    s.net_total_down,
+    s.process,
+    s.connections,
+    s.connections_udp,
+    s.uptime,
+    s.online ? 1 : 0,
+  ];
+  if (s.ping) {
+    parts.push(
+      Object.entries(s.ping)
+        .map(([id, p]) => `${id}:${p.latest}:${p.avg}:${p.loss}`)
+        .sort()
+        .join(","),
+    );
+  }
+  return parts.join("|");
+}
+
+function mapStatusToMetricsCached(
+  uuid: string,
+  s: RpcNodeStatus,
+): RealtimeMetrics {
+  const fp = statusFingerprint(s);
+  const hit = metricsCache.get(uuid);
+  if (hit && hit.fp === fp) return hit.metrics;
+  const metrics = mapStatusToMetrics(s);
+  if (metricsCache.size > 1000) metricsCache.clear();
+  metricsCache.set(uuid, { fp, metrics });
+  return metrics;
 }
 
 export function mapStatusRecordToLoad(r: RpcStatusRecord): LoadRecord {

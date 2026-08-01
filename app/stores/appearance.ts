@@ -5,8 +5,12 @@ const STORAGE_KEY = "appearance";
 
 function readStored(): Appearance {
   if (typeof window === "undefined") return "system";
-  const v = localStorage.getItem(STORAGE_KEY);
-  if (v === "light" || v === "dark" || v === "system") return v;
+  try {
+    const v = localStorage.getItem(STORAGE_KEY);
+    if (v === "light" || v === "dark" || v === "system") return v;
+  } catch {
+    // ignore
+  }
   return "system";
 }
 
@@ -19,6 +23,18 @@ function resolveTheme(appearance: Appearance): "g10" | "g100" {
   return "g10";
 }
 
+/**
+ * Apply the resolved Carbon theme to <html> so the very first paint (before
+ * React mounts / effects run) already has the correct palette. Also used by
+ * the inline <head> bootstrap script in root.tsx.
+ */
+export function applyThemeToDocument(theme: "g10" | "g100") {
+  if (typeof document === "undefined") return;
+  document.documentElement.dataset.carbonTheme = theme;
+  document.documentElement.style.colorScheme =
+    theme === "g100" ? "dark" : "light";
+}
+
 interface AppearanceState {
   appearance: Appearance;
   carbonTheme: "g10" | "g100";
@@ -26,29 +42,42 @@ interface AppearanceState {
   syncSystem: () => void;
 }
 
+const initialAppearance = readStored();
+
 export const useAppearanceStore = create<AppearanceState>((set, get) => ({
-  appearance: "system",
-  carbonTheme: "g10",
+  // Initialize synchronously from storage so the first client render already
+  // matches the user's choice (no flash / no effect ordering dependency).
+  appearance: initialAppearance,
+  carbonTheme: resolveTheme(initialAppearance),
   setAppearance: (appearance) => {
-    localStorage.setItem(STORAGE_KEY, appearance);
-    set({ appearance, carbonTheme: resolveTheme(appearance) });
+    try {
+      localStorage.setItem(STORAGE_KEY, appearance);
+    } catch {
+      // ignore
+    }
+    const carbonTheme = resolveTheme(appearance);
+    set({ appearance, carbonTheme });
+    applyThemeToDocument(carbonTheme);
   },
   syncSystem: () => {
     const appearance = get().appearance;
-    set({ carbonTheme: resolveTheme(appearance) });
+    const carbonTheme = resolveTheme(appearance);
+    set({ carbonTheme });
+    applyThemeToDocument(carbonTheme);
   },
 }));
 
+let mediaListenerBound = false;
+
 export function initAppearance() {
   const appearance = readStored();
-  useAppearanceStore.setState({
-    appearance,
-    carbonTheme: resolveTheme(appearance),
-  });
+  const carbonTheme = resolveTheme(appearance);
+  useAppearanceStore.setState({ appearance, carbonTheme });
+  applyThemeToDocument(carbonTheme);
 
-  if (typeof window !== "undefined") {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => useAppearanceStore.getState().syncSystem();
-    mq.addEventListener("change", onChange);
-  }
+  if (typeof window === "undefined" || mediaListenerBound) return;
+  mediaListenerBound = true;
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  const onChange = () => useAppearanceStore.getState().syncSystem();
+  mq.addEventListener("change", onChange);
 }

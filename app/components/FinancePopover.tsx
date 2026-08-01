@@ -27,10 +27,15 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
   );
   const [rates, setRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES);
   const rootRef = useRef<HTMLDivElement>(null);
+  const ratesLoaded = useRef(false);
 
   useEffect(() => {
+    // Fetch exchange rates lazily on first open (not on every page load) —
+    // avoids an external API call + data exposure for visitors who never open it.
+    if (!open || ratesLoaded.current) return;
+    ratesLoaded.current = true;
     void getDailyExchangeRates().then(setRates);
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -87,7 +92,7 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
         >
           <div className="home-stat-card__top row-between">
             <span className="home-stat-card__label">{label}</span>
-            <Currency size={20} className="home-stat-card__icon" />
+            <Currency size={16} className="home-stat-card__icon" />
           </div>
           <div className="home-stat-card__value-row">
             <span className="home-stat-card__value mono">

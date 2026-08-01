@@ -207,7 +207,7 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
 
                       <TableCell>
                         <span className="table-icon-cell" title={d._os.label}>
-                          <QuickIcon icon={d._os.icon} size={18} title={d._os.label} />
+                          <QuickIcon icon={d._os.icon} size={16} title={d._os.label} />
                         </span>
                       </TableCell>
 
@@ -215,7 +215,7 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                         <span className="table-icon-cell" title={d._arch.label}>
                           <QuickIcon
                             icon={d._arch.icon}
-                            size={18}
+                            size={16}
                             title={d._arch.label}
                           />
                         </span>

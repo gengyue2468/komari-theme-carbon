@@ -116,6 +116,11 @@ export default {
     hours: "{{count}}h",
     minutes: "{{count}}m",
   },
+  chart: {
+    group: "Series",
+    total: "Total",
+    time: "Time",
+  },
   appearance: {
     theme: "Theme",
     light: "Light",

@@ -6,8 +6,13 @@ import {
   ArrowUp,
   Calendar,
   Chip,
+  Code,
   Currency,
+  DataBackup,
   DataBase,
+  DataVolume,
+  Download,
+  RecentlyViewed,
   Time,
   Video,
 } from "@carbon/icons-react";
@@ -70,8 +75,8 @@ export default function NodeDetail() {
 
   if (!node) {
     if (loading) return <PageSpinner />;
-    // eslint-disable-next-line @typescript-eslint/only-throw-error
-    throw new Response(t("detail.notFound"), { status: 404 });
+    // Unified error handling: root ErrorBoundary renders the banner.
+    throw new Error(t("detail.notFound"));
   }
 
   const tags = parseTags(node.tags);
@@ -114,7 +119,9 @@ export default function NodeDetail() {
   const diskUsed = metrics?.disk.used ?? 0;
   const diskTotal = node.disk_total || metrics?.disk.total || 0;
   const diskPct = percentOf(diskUsed, diskTotal);
-  const conns = (metrics?.connections.tcp ?? 0) + (metrics?.connections.udp ?? 0);
+  const tcpConns = metrics?.connections.tcp ?? 0;
+  const udpConns = metrics?.connections.udp ?? 0;
+  const conns = tcpConns + udpConns;
   const swapUsed = metrics?.swap.used ?? 0;
 
   const liveCards = [
@@ -140,7 +147,7 @@ export default function NodeDetail() {
       key: "disk",
       label: t("metrics.disk"),
       value: formatBytes(diskUsed),
-      icon: <DataBase size={16} />,
+      icon: <DataVolume size={16} />,
       bar: diskPct,
       hint: `${diskPct.toFixed(0)}% / ${formatBytes(diskTotal)}`,
     },
@@ -150,7 +157,7 @@ export default function NodeDetail() {
       value: String(conns),
       icon: <Application size={16} />,
       bar: 0,
-      hint: "",
+      hint: `TCP ${tcpConns} · UDP ${udpConns}`,
     },
   ];
 
@@ -193,7 +200,7 @@ export default function NodeDetail() {
     {
       label: t("detail.kernel"),
       value: node.kernel_version,
-      icon: <Application size={16} />,
+      icon: <Code size={16} />,
     },
     {
       label: t("metrics.uptime"),
@@ -205,7 +212,7 @@ export default function NodeDetail() {
       value: metrics?.updated_at
         ? new Date(metrics.updated_at).toLocaleString()
         : "—",
-      icon: <Time size={16} />,
+      icon: <RecentlyViewed size={16} />,
     },
   ];
   const storageItems = [
@@ -221,14 +228,14 @@ export default function NodeDetail() {
       value: swapUsed > 0 ? formatBytes(swapUsed) : formatBytes(node.swap_total),
       sub: swapUsed > 0 ? `/ ${formatBytes(node.swap_total)}` : "",
       pct: node.swap_total > 0 ? percentOf(swapUsed, node.swap_total) : 0,
-      icon: <DataBase size={16} />,
+      icon: <DataBackup size={16} />,
     },
     {
       label: t("metrics.disk"),
       value: diskUsed > 0 ? formatBytes(diskUsed) : formatBytes(node.disk_total),
       sub: diskUsed > 0 ? `/ ${formatBytes(diskTotal)}` : "",
       pct: diskPct,
-      icon: <DataBase size={16} />,
+      icon: <DataVolume size={16} />,
     },
   ];
 
@@ -394,7 +401,7 @@ export default function NodeDetail() {
               ) : null}
               <div className="detail-info-cell__body">
                 <div className="detail-info-cell__label">
-                  <DataBase size={16} />
+                  <Download size={16} />
                   <span>{t("metrics.traffic")}</span>
                   {metrics ? (
                     <span className="detail-traffic-ud mono">

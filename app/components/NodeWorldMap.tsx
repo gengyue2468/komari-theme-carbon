@@ -14,9 +14,8 @@ import { resolveNodeMapPoints } from "~/lib/geo";
 import { layoutMapMarkers, type MapMarker } from "~/lib/map-cluster";
 import { getRegionCode } from "~/lib/region";
 import type { NodeInfo } from "~/types/komari";
-
-const GEO_URL =
-  "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+// Bundled locally so the map renders offline (no jsdelivr dependency).
+import worldGeo from "~/data/countries-110m.json";
 
 const DEFAULT_CENTER: [number, number] = [12, 6];
 const DEFAULT_ZOOM = 1;
@@ -127,7 +126,7 @@ export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
               });
             }}
           >
-            <Geographies geography={GEO_URL}>
+            <Geographies geography={worldGeo}>
               {({ geographies }) =>
                 geographies.map((geo) => {
                   const id = String(geo.id ?? "");

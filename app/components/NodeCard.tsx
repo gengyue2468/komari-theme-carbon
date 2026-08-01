@@ -68,40 +68,35 @@ function Row({ label, children }: { label: React.ReactNode; children: React.Reac
 
 /* ── Ping sparkline ── */
 
-function sparkHeightPct(metric: "latency" | "loss", v: number | null): number {
-  if (v == null) return 18;
-  if (metric === "latency") {
-    // 0–300ms → ~25%–100%
-    return Math.min(100, Math.max(22, (v / 300) * 100));
-  }
-  // loss 0–15% → ~20%–100%
-  return Math.min(100, Math.max(20, (v / 15) * 100));
-}
+const SPARK_CELLS = 12;
 
+/**
+ * Dense "quality barcode": fixed-width strip of small uniform cells. Realtime
+ * status only carries current per-task numbers, so each task's live tone is
+ * tiled across the fixed grid — a snapshot, not a time series.
+ */
 function Spark({ label, display, metric, bars }: {
   label: string; display: string; metric: "latency" | "loss";
   bars: Array<{ time: string; latency: number | null; loss: number | null }>;
 }) {
+  const cells =
+    bars.length > 0
+      ? Array.from({ length: SPARK_CELLS }, (_, i) => bars[i % bars.length])
+      : [];
+
   return (
     <div className="card-spark">
       <div className="card-row">
         <span className="card-row__label">{label}</span>
         <span className="card-row__value mono">{display}</span>
       </div>
-      <div
-        className="card-spark__track"
-        style={{
-          gridTemplateColumns: `repeat(${Math.max(bars.length, 1)}, minmax(0, 1fr))`,
-        }}
-        aria-hidden
-      >
-        {bars.map((p, i) => {
+      <div className="card-spark__track" aria-hidden>
+        {cells.map((p, i) => {
           const v = metric === "latency" ? p.latency : p.loss;
           return (
             <span
               key={`${p.time}-${i}`}
               className={`card-spark__cell ${barToneClass(metric, v)}`}
-              style={{ height: `${sparkHeightPct(metric, v)}%` }}
             />
           );
         })}
@@ -155,8 +150,8 @@ function StatGroup({ node, online, metrics, showUptime }: NodeCardProps) {
         <h3 className="card-section__title">{t("detail.network")}</h3>
         <Row label={t("metrics.rate")}>
           <span className="card-rate mono">
-            <span className="card-rate__up"><ArrowUp size={14} />{metrics ? formatRate(metrics.network.up) : "—"}</span>
-            <span className="card-rate__down"><ArrowDown size={14} />{metrics ? formatRate(metrics.network.down) : "—"}</span>
+            <span className="card-rate__up"><ArrowUp size={12} />{metrics ? formatRate(metrics.network.up) : "—"}</span>
+            <span className="card-rate__down"><ArrowDown size={12} />{metrics ? formatRate(metrics.network.down) : "—"}</span>
           </span>
         </Row>
         {showUptime && <Row label={t("metrics.uptime")}><span className="mono">{formatUptime(metrics?.uptime ?? 0)}</span></Row>}
@@ -245,8 +240,8 @@ export const NodeCard = memo(
           </Tag>
         ) : null}
         <div className="node-card__badges">
-          <QuickIcon icon={os.icon} size={18} title={os.label} />
-          <QuickIcon icon={arch.icon} size={18} title={arch.label} />
+          <QuickIcon icon={os.icon} size={16} title={os.label} />
+          <QuickIcon icon={arch.icon} size={16} title={arch.label} />
         </div>
         <span className="node-card__cpu mono">{node.cpu_name}</span>
       </div>

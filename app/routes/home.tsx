@@ -11,9 +11,9 @@ import {
   Close,
   Currency,
   DataBase,
+  DataVolume,
   Download,
   Grid,
-  IbmCloudBareMetalServer,
   List,
   Search as SearchIcon,
 } from "@carbon/icons-react";
@@ -47,7 +47,7 @@ const ICONS: Record<
   CarbonIconType
 > = {
   memory: DataBase,
-  disk: IbmCloudBareMetalServer,
+  disk: DataVolume,
   finance: Currency,
   traffic: Download,
   up: ArrowUp,
@@ -55,27 +55,30 @@ const ICONS: Record<
 };
 
 const HOME_UI_KEY = "komari-carbon-home-ui";
+const HOME_SCROLL_KEY = "komari-carbon-home-scroll";
 
 interface HomeUiState {
   group: string;
   search: string;
   searchOpen: boolean;
+}
+
+interface HomeScrollState {
   scrollY: number;
 }
 
-function readHomeUi(): HomeUiState | null {
+function readJson<T>(key: string): T | null {
   try {
-    const raw = sessionStorage.getItem(HOME_UI_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as HomeUiState;
+    const raw = sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
   }
 }
 
-function writeHomeUi(state: HomeUiState) {
+function writeJson(key: string, value: unknown) {
   try {
-    sessionStorage.setItem(HOME_UI_KEY, JSON.stringify(state));
+    sessionStorage.setItem(key, JSON.stringify(value));
   } catch {
     // ignore
   }
@@ -92,17 +95,28 @@ export default function Home() {
   const viewMode = useNodesStore((s) => s.viewMode);
   const setViewMode = useNodesStore((s) => s.setViewMode);
 
+  // POP = back/forward: restore the UI snapshot. Reload = fresh entry (don't
+  // resurrect stale filters/scroll from an earlier visit in this tab).
+  const canRestore = useMemo(() => {
+    if (navType !== "POP") return false;
+    if (typeof window === "undefined") return true;
+    const nav = performance.getEntriesByType?.("navigation")?.[0] as
+      | { navigationType?: string }
+      | undefined;
+    return nav?.navigationType !== "reload";
+  }, [navType]);
+
   const saved = useMemo(() => {
     if (typeof window === "undefined") return null;
-    // POP = back/forward; restore UI. PUSH/REPLACE = fresh entry.
-    return navType === "POP" ? readHomeUi() : null;
-  }, [navType]);
+    return canRestore ? readJson<HomeUiState>(HOME_UI_KEY) : null;
+  }, [canRestore]);
 
   const [group, setGroup] = useState(saved?.group ?? "all");
   const [searchOpen, setSearchOpen] = useState(saved?.searchOpen ?? false);
   const [search, setSearch] = useState(saved?.search ?? "");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const restoredScroll = useRef(false);
+  const scrollRestored = useRef(false);
+  const [scrollTrack, setScrollTrack] = useState(false);
 
   const groupTabs = useMemo(() => {
     const names = [...new Set(nodes.map((n) => n.group).filter(Boolean))].sort();
@@ -151,51 +165,61 @@ export default function Home() {
     return () => window.clearTimeout(id);
   }, [searchOpen]);
 
-  // Persist filters + throttled scroll
+  // Persist filters (no scroll — kept separate so filter changes never clobber
+  // the saved back-nav scroll position).
   useEffect(() => {
-    writeHomeUi({
-      group,
-      search,
-      searchOpen,
-      scrollY: window.scrollY,
-    });
+    writeJson(HOME_UI_KEY, { group, search, searchOpen });
   }, [group, search, searchOpen]);
 
+  // Restore scroll after back navigation once nodes are ready, then enable
+  // (throttled) scroll persistence.
   useEffect(() => {
-    let ticking = false;
-    const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      window.requestAnimationFrame(() => {
-        ticking = false;
-        const prev = readHomeUi();
-        writeHomeUi({
-          group: prev?.group ?? group,
-          search: prev?.search ?? search,
-          searchOpen: prev?.searchOpen ?? searchOpen,
-          scrollY: window.scrollY,
-        });
-      });
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      onScroll();
-      window.removeEventListener("scroll", onScroll);
-    };
-  }, [group, search, searchOpen]);
-
-  // Restore scroll after back navigation once nodes are ready
-  useEffect(() => {
-    if (restoredScroll.current) return;
-    if (navType !== "POP") return;
-    const y = saved?.scrollY ?? readHomeUi()?.scrollY ?? 0;
-    if (y <= 0 || nodes.length === 0) return;
-    restoredScroll.current = true;
+    if (scrollRestored.current) return;
+    if (!canRestore) {
+      scrollRestored.current = true;
+      setScrollTrack(true);
+      return;
+    }
+    const y =
+      readJson<HomeScrollState>(HOME_SCROLL_KEY)?.scrollY ?? 0;
+    if (y <= 0) {
+      scrollRestored.current = true;
+      setScrollTrack(true);
+      return;
+    }
+    if (nodes.length === 0) return;
+    scrollRestored.current = true;
+    setScrollTrack(true);
     const id = window.requestAnimationFrame(() => {
       window.scrollTo({ top: y, behavior: "instant" });
     });
     return () => window.cancelAnimationFrame(id);
-  }, [navType, nodes.length, saved?.scrollY]);
+  }, [canRestore, nodes.length]);
+
+  // Throttled scroll persistence. Mounted only after the back-nav restore has
+  // completed, so it never overwrites the saved position on entry.
+  useEffect(() => {
+    if (!scrollTrack) return;
+    let timer: number | undefined;
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      lastY = window.scrollY;
+      if (timer != null) return;
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        writeJson(HOME_SCROLL_KEY, { scrollY: window.scrollY });
+      }, 250);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (timer != null) {
+        window.clearTimeout(timer);
+        timer = undefined;
+        writeJson(HOME_SCROLL_KEY, { scrollY: lastY });
+      }
+    };
+  }, [scrollTrack]);
 
   const closeSearch = () => {
     setSearchOpen(false);
@@ -227,7 +251,7 @@ export default function Home() {
                   value={stat.value}
                   unit={stat.unit}
                   suffix={stat.suffix}
-                  icon={<Icon size={20} className="home-stat-card__icon" />}
+                  icon={<Icon size={16} className="home-stat-card__icon" />}
                   nodes={nodes}
                   realtime={realtime}
                   onlineIds={onlineIds}

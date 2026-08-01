@@ -1,6 +1,6 @@
 import type { NodePingLive, RealtimeMetrics } from "~/types/komari";
 import type { PingHistoryResponse } from "~/types/komari";
-import { PING_TASK_COLORS } from "~/lib/ping-tone";
+import { ISP_COLORS, PING_TASK_COLORS } from "~/lib/ping-tone";
 
 export interface PingNetworkDisplay {
   name: string;
@@ -88,28 +88,20 @@ export function pickThreeNetworks(
   }));
 }
 
-const SPARK_SLOTS = 12;
-
 /**
- * Card spark: real live task latency/loss only (no synthetic oscillation).
- * Tiles task values across ~12 slots so the strip stays visually dense.
+ * Card spark: one bar per live ping task (real latency/loss snapshot). No
+ * synthetic data — realtime status only carries current values, so we show
+ * exactly those rather than fabricating history.
  */
 export function sparkFromLivePing(
   ping?: Record<string, NodePingLive>,
 ): PingSparkPoint[] {
   const nets = networksFromLivePing(ping);
-  if (nets.length === 0) return [];
-  const slots = Math.max(SPARK_SLOTS, nets.length);
-  const out: PingSparkPoint[] = [];
-  for (let i = 0; i < slots; i++) {
-    const n = nets[i % nets.length];
-    out.push({
-      time: `${n.name || i}-${i}`,
-      latency: n.latencyMs,
-      loss: n.lossPct ?? null,
-    });
-  }
-  return out;
+  return nets.map((n, i) => ({
+    time: `${n.name || i}-${i}`,
+    latency: n.latencyMs,
+    loss: n.lossPct ?? null,
+  }));
 }
 
 export function cardPingFromMetrics(metrics?: RealtimeMetrics): {
@@ -167,12 +159,20 @@ export function buildPingChartModel(
   const taskMap = new Map<number, PingChartTask>();
   const byTime = new Map<string, Record<string, number | null>>();
 
+  // 电信/联通/移动 get stable identity colors; other tasks fall back to the
+  // rotating palette so colors don't shuffle when task order changes.
+  const colorFor = (name: string, id: number): string => {
+    const cat = categorizeIsp(name);
+    if (cat) return ISP_COLORS[cat];
+    return PING_TASK_COLORS[(id - 1) % PING_TASK_COLORS.length];
+  };
+
   for (const t of hist.tasks) {
     const id = String(t.id);
     taskMap.set(t.id, {
       id,
       name: t.name,
-      color: PING_TASK_COLORS[(t.id - 1) % PING_TASK_COLORS.length],
+      color: colorFor(t.name, t.id),
       latest: t.latest ?? null,
       avg: t.avg ?? null,
       min: t.min ?? null,
@@ -188,7 +188,7 @@ export function buildPingChartModel(
       taskMap.set(r.task_id, {
         id,
         name: `Task ${r.task_id}`,
-        color: PING_TASK_COLORS[(r.task_id - 1) % PING_TASK_COLORS.length],
+        color: colorFor(`Task ${r.task_id}`, r.task_id),
         latest: null,
         avg: null,
         min: null,

@@ -31,6 +31,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* Apply stored/OS theme before first paint to avoid a light/dark flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var a=localStorage.getItem('appearance');var d=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;var t=a==='light'?'g10':a==='dark'?'g100':(d?'g100':'g10');document.documentElement.dataset.carbonTheme=t;document.documentElement.style.colorScheme=t==='g100'?'dark':'light';}catch(e){}})();`,
+          }}
+        />
         <Meta />
         <Links />
       </head>

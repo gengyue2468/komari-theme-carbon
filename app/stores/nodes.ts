@@ -128,7 +128,37 @@ export const useNodesStore = create<NodesState>((set, get) => ({
       const baseUnsub = dataSource.subscribeRealtime(
         (snap) => {
           if (stopped) return;
-          set({ onlineIds: snap.online, realtime: snap.data });
+          // Only publish when something actually changed (metrics are cached
+          // by reference in the mapper) so quiet ticks don't re-render the
+          // whole list every poll interval.
+          const prevData = get().realtime;
+          const prevOnline = get().onlineIds;
+          let changed = snap.online.length !== prevOnline.length;
+          if (!changed) {
+            for (let i = 0; i < prevOnline.length; i++) {
+              if (snap.online[i] !== prevOnline[i]) {
+                changed = true;
+                break;
+              }
+            }
+          }
+          if (!changed) {
+            for (const key of Object.keys(snap.data)) {
+              if (snap.data[key] !== prevData[key]) {
+                changed = true;
+                break;
+              }
+            }
+          }
+          if (!changed) {
+            for (const key of Object.keys(prevData)) {
+              if (!(key in snap.data)) {
+                changed = true;
+                break;
+              }
+            }
+          }
+          if (changed) set({ onlineIds: snap.online, realtime: snap.data });
         },
         { intervalMs: pollIntervalMs },
       );

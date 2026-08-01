@@ -17,7 +17,11 @@ import { useTranslation } from "react-i18next";
 import { Link, Outlet } from "react-router";
 import { setLanguage, syncHtmlLang } from "~/i18n";
 import type { Appearance } from "~/types/komari";
-import { initAppearance, useAppearanceStore } from "~/stores/appearance";
+import {
+  applyThemeToDocument,
+  initAppearance,
+  useAppearanceStore,
+} from "~/stores/appearance";
 import { useNodesStore } from "~/stores/nodes";
 
 const THEME_ORDER: Appearance[] = ["system", "light", "dark"];
@@ -47,9 +51,7 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
   }, [bootstrap, teardown]);
 
   useEffect(() => {
-    document.documentElement.dataset.carbonTheme = carbonTheme;
-    document.documentElement.style.colorScheme =
-      carbonTheme === "g100" ? "dark" : "light";
+    applyThemeToDocument(carbonTheme);
   }, [carbonTheme]);
 
   useEffect(() => {

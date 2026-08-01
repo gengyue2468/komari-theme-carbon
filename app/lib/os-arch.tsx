@@ -3,7 +3,7 @@ import { Chip, ContainerSoftware, Terminal, VirtualMachine } from "@carbon/icons
 
 export type IconRef =
   | { kind: "carbon"; Icon: CarbonIconType }
-  | { kind: "iconify"; id: string };
+  | { kind: "brand"; id: string };
 
 /* ── CPU vendor ── */
 
@@ -12,7 +12,7 @@ export function getArchIcon(arch: string, cpuName = ""): { icon: IconRef; label:
   const cpu = cpuName.trim().toLowerCase();
   const label = [cpuName.trim(), arch.trim()].filter(Boolean).join(" · ") || "CPU";
 
-  // Prefer simple-icons set for consistent stroke/fill weight
+  // Brand logos are inlined locally (see lib/brand-icons.ts) — no CDN.
   if (
     cpu.includes("amd") ||
     cpu.includes("epyc") ||
@@ -20,7 +20,7 @@ export function getArchIcon(arch: string, cpuName = ""): { icon: IconRef; label:
     cpu.includes("threadripper") ||
     cpu.includes("athlon")
   )
-    return { icon: { kind: "iconify", id: "bi:amd" }, label };
+    return { icon: { kind: "brand", id: "amd" }, label };
   if (
     cpu.includes("intel") ||
     cpu.includes("xeon") ||
@@ -29,7 +29,7 @@ export function getArchIcon(arch: string, cpuName = ""): { icon: IconRef; label:
     cpu.includes("celeron") ||
     cpu.includes("pentium")
   )
-    return { icon: { kind: "iconify", id: "simple-icons:intel" }, label };
+    return { icon: { kind: "brand", id: "intel" }, label };
   if (
     cpu.includes("arm") ||
     cpu.includes("cortex") ||
@@ -38,11 +38,11 @@ export function getArchIcon(arch: string, cpuName = ""): { icon: IconRef; label:
     a.includes("arm") ||
     a.includes("aarch")
   )
-    return { icon: { kind: "iconify", id: "simple-icons:arm" }, label };
+    return { icon: { kind: "brand", id: "arm" }, label };
   if (a.includes("amd64") || a.includes("x86_64") || a.includes("x64"))
-    return { icon: { kind: "iconify", id: "bi:amd" }, label };
+    return { icon: { kind: "brand", id: "amd" }, label };
   if (a.includes("i386") || a.includes("i686") || a === "x86")
-    return { icon: { kind: "iconify", id: "simple-icons:intel" }, label };
+    return { icon: { kind: "brand", id: "intel" }, label };
 
   return { icon: { kind: "carbon", Icon: Chip }, label };
 }
@@ -50,30 +50,30 @@ export function getArchIcon(arch: string, cpuName = ""): { icon: IconRef; label:
 /* ── OS ── */
 
 const OS_ICONS: Array<{ kw: string[]; icon: string; label: string }> = [
-  { kw: ["ubuntu", "kubuntu"], icon: "simple-icons:ubuntu", label: "Ubuntu" },
-  { kw: ["debian"], icon: "simple-icons:debian", label: "Debian" },
-  { kw: ["alma"], icon: "simple-icons:almalinux", label: "AlmaLinux" },
-  { kw: ["rocky"], icon: "simple-icons:rockylinux", label: "Rocky Linux" },
-  { kw: ["centos"], icon: "simple-icons:centos", label: "CentOS" },
-  { kw: ["fedora"], icon: "simple-icons:fedora", label: "Fedora" },
-  { kw: ["rhel", "red hat", "redhat"], icon: "simple-icons:redhat", label: "Red Hat" },
-  { kw: ["opensuse", "suse"], icon: "simple-icons:opensuse", label: "openSUSE" },
-  { kw: ["arch"], icon: "simple-icons:archlinux", label: "Arch Linux" },
-  { kw: ["alpine"], icon: "simple-icons:alpinelinux", label: "Alpine" },
-  { kw: ["mint"], icon: "simple-icons:linuxmint", label: "Linux Mint" },
-  { kw: ["kali"], icon: "simple-icons:kalilinux", label: "Kali" },
-  { kw: ["pop!_os", "popos", "pop os"], icon: "simple-icons:popos", label: "Pop!_OS" },
-  { kw: ["openwrt", "immortalwrt"], icon: "simple-icons:openwrt", label: "OpenWrt" },
-  { kw: ["freebsd", "openbsd", "netbsd", "bsd"], icon: "simple-icons:freebsd", label: "FreeBSD" },
-  { kw: ["macos", "darwin", "os x"], icon: "simple-icons:apple", label: "macOS" },
-  { kw: ["linux"], icon: "simple-icons:linux", label: "Linux" },
+  { kw: ["ubuntu", "kubuntu"], icon: "ubuntu", label: "Ubuntu" },
+  { kw: ["debian"], icon: "debian", label: "Debian" },
+  { kw: ["alma"], icon: "almalinux", label: "AlmaLinux" },
+  { kw: ["rocky"], icon: "rockylinux", label: "Rocky Linux" },
+  { kw: ["centos"], icon: "centos", label: "CentOS" },
+  { kw: ["fedora"], icon: "fedora", label: "Fedora" },
+  { kw: ["rhel", "red hat", "redhat"], icon: "redhat", label: "Red Hat" },
+  { kw: ["opensuse", "suse"], icon: "opensuse", label: "openSUSE" },
+  { kw: ["arch"], icon: "archlinux", label: "Arch Linux" },
+  { kw: ["alpine"], icon: "alpinelinux", label: "Alpine" },
+  { kw: ["mint"], icon: "linuxmint", label: "Linux Mint" },
+  { kw: ["kali"], icon: "kalilinux", label: "Kali" },
+  { kw: ["pop!_os", "popos", "pop os"], icon: "popos", label: "Pop!_OS" },
+  { kw: ["openwrt", "immortalwrt"], icon: "openwrt", label: "OpenWrt" },
+  { kw: ["freebsd", "openbsd", "netbsd", "bsd"], icon: "freebsd", label: "FreeBSD" },
+  { kw: ["macos", "darwin", "os x"], icon: "apple", label: "macOS" },
+  { kw: ["linux"], icon: "linux", label: "Linux" },
 ];
 
 export function getOsIcon(os: string): { icon: IconRef; label: string } {
   const s = os.toLowerCase();
   for (const item of OS_ICONS) {
     if (item.kw.some((k) => s.includes(k))) {
-      return { icon: { kind: "iconify", id: item.icon }, label: item.label };
+      return { icon: { kind: "brand", id: item.icon }, label: item.label };
     }
   }
   return { icon: { kind: "carbon", Icon: Terminal }, label: osShort(os) };

@@ -149,6 +149,7 @@ export class RpcClient {
           reject(new RpcError(-32000, "WebSocket error"));
         };
         socket.onclose = () => {
+          window.clearTimeout(failTimer);
           this.ws = null;
           for (const [, p] of this.pending) {
             window.clearTimeout(p.timer);
@@ -211,7 +212,13 @@ export class RpcClient {
         reject,
         timer,
       });
-      this.ws.send(JSON.stringify(req));
+      try {
+        this.ws.send(JSON.stringify(req));
+      } catch (e) {
+        window.clearTimeout(timer);
+        this.pending.delete(id);
+        reject(e instanceof Error ? e : new Error(String(e)));
+      }
     });
   }
 

@@ -8,6 +8,16 @@ export const PING_TASK_COLORS = [
   "#ee5396",
 ] as const;
 
+/**
+ * Unified identity colors for the three Chinese ISPs across latency charts:
+ * 电信 CT / 联通 CU / 移动 CM. No green — 移动 uses purple.
+ */
+export const ISP_COLORS: Record<"CT" | "CU" | "CM", string> = {
+  CT: "var(--cds-interactive)", // 电信 — blue
+  CU: "var(--cds-support-error)", // 联通 — red
+  CM: "#8a3ffc", // 移动 — purple
+};
+
 /** Upload / primary series */
 export const COLOR_UP = "var(--cds-interactive)";
 /** Download / secondary — purple, not near-blue support-info */

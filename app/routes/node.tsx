@@ -13,16 +13,27 @@ import {
   DataVolume,
   Download,
   RecentlyViewed,
+  Temperature,
   Time,
   Video,
 } from "@carbon/icons-react";
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import Marquee from "react-fast-marquee";
+import {
+  lazy,
+  type ComponentType,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
 import { QuickIcon } from "~/components/BrandIcon";
 import { PageSpinner } from "~/components/PageSpinner";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
+  formatBillingCycle,
   formatBytes,
   formatRate,
   formatRemainTime,
@@ -30,6 +41,7 @@ import {
   isNeverExpire,
   parseTags,
   percentOf,
+  trafficLimitTypeLabel,
   trafficUsedBytes,
 } from "~/lib/format";
 import { nodeFinance } from "~/lib/home-stats";
@@ -56,22 +68,68 @@ export function meta({}: Route.MetaArgs) {
 // Distinct tag colors by index
 const TAG_TYPES = ["blue", "cyan", "purple", "teal", "magenta"] as const;
 
+/**
+ * Long node names auto-scroll (marquee) instead of squeezing the status dot /
+ * badges. The <Marquee> is always mounted so the DOM stays stable (no
+ * remount flicker); `play`/`autoFill` are toggled based on whether the name
+ * actually overflows its container.
+ */
+function ScrollingName({ name }: { name: string }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [overflow, setOverflow] = useState(false);
+
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const check = () => {
+      const text = textRef.current;
+      if (!text) return;
+      setOverflow(text.scrollWidth > wrap.clientWidth + 1);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [name]);
+
+  // Interop with react-fast-marquee (CJS): Vite dev's optimizeDeps exposes the
+  // module.exports object (component on .default); the production bundle
+  // interops the component directly. Handle both.
+  const MarqueeComp =
+    (Marquee as unknown as { default?: ComponentType }).default ?? Marquee;
+
+  return (
+    <div ref={wrapRef} className="detail-title__marquee">
+      <MarqueeComp
+        play={overflow}
+        autoFill={overflow}
+        gradient={false}
+        speed={40}
+        pauseOnHover
+      >
+        <span ref={textRef} className="detail-title__name">
+          {name}
+        </span>
+      </MarqueeComp>
+    </div>
+  );
+}
+
 export default function NodeDetail() {
   const { uuid = "" } = useParams();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const nodes = useNodesStore((s) => s.nodes);
   const onlineIds = useNodesStore((s) => s.onlineIds);
   const realtime = useNodesStore((s) => s.realtime);
   const loading = useNodesStore((s) => s.loading);
+  const recordEnabled =
+    useNodesStore((s) => s.publicSettings?.record_enabled) !== false;
 
   const node = useMemo(() => nodes.find((n) => n.uuid === uuid), [nodes, uuid]);
   const online = onlineIds.includes(uuid);
   const metrics = realtime[uuid];
-
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "instant" });
-  }, [uuid]);
 
   if (!node) {
     if (loading) return <PageSpinner />;
@@ -100,8 +158,7 @@ export default function NodeDetail() {
       : node.price === 0
         ? "—"
         : `${node.currency}${node.price}`;
-  const cycleText =
-    node.billing_cycle > 0 ? ` / ${node.billing_cycle}${t("detail.days")}` : "";
+  const cycleText = formatBillingCycle(node.billing_cycle);
 
   const remainTimeText = formatRemainTime(node.expired_at);
   const expireDateText =
@@ -123,6 +180,10 @@ export default function NodeDetail() {
   const udpConns = metrics?.connections.udp ?? 0;
   const conns = tcpConns + udpConns;
   const swapUsed = metrics?.swap.used ?? 0;
+  const hasGpu = !!node.gpu_name && node.gpu_name !== "None";
+  const gpuPct = metrics?.gpu?.average_usage ?? 0;
+  const gpuDetails = metrics?.gpu?.detailed_info ?? [];
+  const agentMessage = metrics?.message?.trim() || "";
 
   const liveCards = [
     {
@@ -159,19 +220,39 @@ export default function NodeDetail() {
       bar: 0,
       hint: `TCP ${tcpConns} · UDP ${udpConns}`,
     },
+    ...(hasGpu
+      ? [
+          {
+            key: "gpu",
+            label: t("metrics.gpu"),
+            value: `${gpuPct.toFixed(0)}%`,
+            icon: <Video size={16} />,
+            bar: gpuPct,
+            hint: node.gpu_name,
+          },
+        ]
+      : []),
   ];
 
   const financeCards = [
-    { key: "price", label: t("detail.nodePrice"), value: priceText, unit: cycleText.trim() || undefined, Icon: Currency },
+    { key: "price", label: t("detail.nodePrice"), value: priceText, unit: cycleText || undefined, Icon: Currency },
     { key: "monthly", label: t("stats.monthlyCost"), value: finance.monthly, Icon: Currency },
     { key: "remain-time", label: t("detail.remainTime"), value: remainTimeText, unit: expireDateText, Icon: Calendar },
     { key: "remain-value", label: t("stats.remaining"), value: finance.remaining, Icon: Currency },
   ];
 
+  const cpuCoresText =
+    node.cpu_physical_cores > 0
+      ? t("detail.coresDetail", {
+          logical: node.cpu_cores,
+          physical: node.cpu_physical_cores,
+        })
+      : `×${node.cpu_cores}`;
+
   const hardwareItems = [
     {
       label: t("metrics.cpu"),
-      value: `${node.cpu_name} (×${node.cpu_cores})`,
+      value: `${node.cpu_name} (${cpuCoresText})`,
       icon: <Chip size={16} />,
       wide: true,
     },
@@ -210,10 +291,19 @@ export default function NodeDetail() {
     {
       label: t("detail.lastSeen"),
       value: metrics?.updated_at
-        ? new Date(metrics.updated_at).toLocaleString()
+        ? new Date(metrics.updated_at).toLocaleString(i18n.language)
         : "—",
       icon: <RecentlyViewed size={16} />,
     },
+    ...(metrics?.temp != null && metrics.temp > 0
+      ? [
+          {
+            label: t("metrics.temperature"),
+            value: `${metrics.temp.toFixed(0)}°C`,
+            icon: <Temperature size={16} />,
+          },
+        ]
+      : []),
   ];
   const storageItems = [
     {
@@ -251,9 +341,9 @@ export default function NodeDetail() {
             iconDescription={t("detail.back")}
             onClick={() => navigate("/")}
           />
+          <RegionFlag region={node.region} className="detail-flag" />
           <h1 className="detail-title">
-            <RegionFlag region={node.region} className="detail-flag" />
-            {node.name}
+            <ScrollingName name={node.name} />
           </h1>
           <span
             className={`status-dot${online ? " is-on" : ""}`}
@@ -265,6 +355,11 @@ export default function NodeDetail() {
               {tag}
             </Tag>
           ))}
+          {node.auto_renewal ? (
+            <Tag type="blue" size="sm">
+              {t("detail.autoRenewal")}
+            </Tag>
+          ) : null}
         </div>
       </div>
 
@@ -272,7 +367,13 @@ export default function NodeDetail() {
         <p className="detail-remark">{node.public_remark.trim()}</p>
       ) : null}
 
-      <div className="detail-live-grid">
+      {agentMessage ? (
+        <p className="detail-agent-message" role="status">
+          {agentMessage}
+        </p>
+      ) : null}
+
+      <div className={`detail-live-grid${hasGpu ? " is-gpu" : ""}`}>
         {liveCards.map((card) => (
           <Tile key={card.key} className="detail-metric-card">
             <div className="detail-metric-card__top row-between">
@@ -420,6 +521,12 @@ export default function NodeDetail() {
                       · {trafficPct.toFixed(1)}%
                     </span>
                   ) : null}
+                  {hasLimit ? (
+                    <span className="detail-traffic-pct">
+                      {" "}
+                      · {trafficLimitTypeLabel(node.traffic_limit_type)}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -443,13 +550,63 @@ export default function NodeDetail() {
         </Tile>
       </div>
 
-      <Suspense fallback={<PageSpinner />}>
-        <LoadChart uuid={node.uuid} />
-      </Suspense>
+      {gpuDetails.length > 0 ? (
+        <div className="detail-gpu-grid">
+          {gpuDetails.map((g, i) => {
+            const memPct =
+              g.memory_total > 0
+                ? percentOf(g.memory_used, g.memory_total)
+                : 0;
+            return (
+              <Tile key={`${g.name}-${i}`} className="detail-metric-card">
+                <div className="detail-metric-card__top row-between">
+                  <span className="detail-metric-card__label">
+                    {g.name || `${t("metrics.gpu")} ${i + 1}`}
+                  </span>
+                  <Video size={16} className="detail-metric-card__icon" />
+                </div>
+                <div className="detail-metric-card__value-row">
+                  <span className="detail-metric-card__value mono">
+                    {g.utilization.toFixed(0)}%
+                  </span>
+                  {g.temperature > 0 ? (
+                    <span className="detail-metric-card__unit mono">
+                      {g.temperature}°C
+                    </span>
+                  ) : null}
+                </div>
+                {memPct > 0 ? (
+                  <>
+                    <div className="detail-metric-card__bar-track">
+                      <div
+                        className={`detail-metric-card__bar-fill${memPct >= 90 ? " is-warn" : ""}${memPct >= 98 ? " is-error" : ""}`}
+                        style={{ width: `${Math.min(100, memPct)}%` }}
+                      />
+                    </div>
+                    <span className="detail-metric-card__hint mono">
+                      {formatBytes(g.memory_used)} / {formatBytes(g.memory_total)}
+                    </span>
+                  </>
+                ) : null}
+              </Tile>
+            );
+          })}
+        </div>
+      ) : null}
 
-      <Suspense fallback={<PageSpinner />}>
-        <PingChart uuid={node.uuid} online={online} />
-      </Suspense>
+      {recordEnabled ? (
+        <>
+          <Suspense fallback={<PageSpinner />}>
+            <LoadChart uuid={node.uuid} />
+          </Suspense>
+
+          <Suspense fallback={<PageSpinner />}>
+            <PingChart uuid={node.uuid} online={online} />
+          </Suspense>
+        </>
+      ) : (
+        <p className="empty">{t("detail.recordsDisabled")}</p>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   buildFinanceSummary,
   getDailyExchangeRates,
   getStoredFinanceCurrency,
+  readStoredRates,
   setStoredFinanceCurrency,
   type CurrencyCode,
   type ExchangeRates,
@@ -20,22 +21,30 @@ interface FinancePopoverProps {
 }
 
 export function FinancePopover({ nodes, label }: FinancePopoverProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const [base, setBase] = useState<CurrencyCode>(() =>
     typeof window !== "undefined" ? getStoredFinanceCurrency() : "CNY",
   );
-  const [rates, setRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES);
+  const [rates, setRates] = useState<ExchangeRates>(() =>
+    typeof window !== "undefined"
+      ? readStoredRates() ?? DEFAULT_EXCHANGE_RATES
+      : DEFAULT_EXCHANGE_RATES,
+  );
   const rootRef = useRef<HTMLDivElement>(null);
-  const ratesLoaded = useRef(false);
 
   useEffect(() => {
-    // Fetch exchange rates lazily on first open (not on every page load) —
-    // avoids an external API call + data exposure for visitors who never open it.
-    if (!open || ratesLoaded.current) return;
-    ratesLoaded.current = true;
-    void getDailyExchangeRates().then(setRates);
-  }, [open]);
+    // Load exchange rates up-front (cached today's rates are applied
+    // synchronously via readStoredRates). Fetching on mount keeps the value
+    // on the card identical to the one shown after the popover opens.
+    let cancelled = false;
+    void getDailyExchangeRates().then((r) => {
+      if (!cancelled) setRates(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -54,8 +63,8 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
   }, [open]);
 
   const summary = useMemo(
-    () => buildFinanceSummary(nodes, rates, base),
-    [nodes, rates, base],
+    () => buildFinanceSummary(nodes, rates, base, i18n.language),
+    [nodes, rates, base, i18n.language],
   );
 
   const items = useMemo(

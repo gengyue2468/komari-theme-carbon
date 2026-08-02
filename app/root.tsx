@@ -1,12 +1,6 @@
 import { InlineNotification, Loading } from "@carbon/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import {
-  isRouteErrorResponse,
-  Links,
-  Meta,
-  Scripts,
-  ScrollRestoration,
-} from "react-router";
+import { isRouteErrorResponse, Links, Meta, Scripts } from "react-router";
 import type { Route } from "./+types/root";
 import { AppShell } from "~/components/AppShell";
 import { queryClient } from "~/lib/query-client";
@@ -42,7 +36,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
-        <ScrollRestoration />
         <Scripts />
       </body>
     </html>

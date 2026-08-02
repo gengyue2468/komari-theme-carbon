@@ -1,4 +1,5 @@
 import {
+  billingCycleMonths,
   formatBytes,
   formatRate,
   isNeverExpire,
@@ -132,7 +133,11 @@ export function nodeFinance(node: NodeInfo): {
       remaining: "—",
     };
   }
-  const monthly = (node.price / node.billing_cycle) * 30;
+  const months = billingCycleMonths(node.billing_cycle);
+  if (months <= 0) {
+    return { monthly: "—", remaining: "—" };
+  }
+  const monthly = node.price / months;
   const cur = node.currency || "";
   let remaining = "—";
   if (node.expired_at && !isNeverExpire(node.expired_at)) {

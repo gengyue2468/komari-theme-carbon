@@ -12,9 +12,9 @@ import {
   Screen,
   Settings,
 } from "@carbon/icons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, Outlet } from "react-router";
+import { Link, Outlet, useLocation } from "react-router";
 import { setLanguage, syncHtmlLang } from "~/i18n";
 import type { Appearance } from "~/types/komari";
 import {
@@ -39,6 +39,11 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
   const [faviconOk, setFaviconOk] = useState(true);
 
   const density = useNodesStore((s) => s.density);
+
+  const { pathname } = useLocation();
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [pathname]);
 
   useEffect(() => {
     initAppearance();

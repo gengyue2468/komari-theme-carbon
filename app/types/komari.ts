@@ -68,6 +68,18 @@ export interface NodePingLive {
 
 export interface RealtimeMetrics {
   cpu: { usage: number };
+  gpu?: {
+    count: number;
+    average_usage: number;
+    detailed_info: Array<{
+      name: string;
+      memory_total: number;
+      memory_used: number;
+      utilization: number;
+      temperature: number;
+    }>;
+  };
+  temp?: number;
   ram: { total: number; used: number };
   swap: { total: number; used: number };
   load: { load1: number; load5: number; load15: number };
@@ -83,17 +95,6 @@ export interface RealtimeMetrics {
   process: number;
   message: string;
   updated_at: string;
-  gpu?: {
-    count: number;
-    average_usage: number;
-    detailed_info: Array<{
-      name: string;
-      memory_total: number;
-      memory_used: number;
-      utilization: number;
-      temperature: number;
-    }>;
-  };
   ping?: Record<string, NodePingLive>;
 }
 
@@ -119,6 +120,8 @@ export interface LoadRecord {
   net_out: number;
   net_total_up: number;
   net_total_down: number;
+  traffic_up: number;
+  traffic_down: number;
   process: number;
   connections: number;
   connections_udp: number;

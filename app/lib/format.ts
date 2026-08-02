@@ -35,15 +35,31 @@ export function formatUptime(seconds: number): string {
   return formatDuration(seconds);
 }
 
-/** Komari uses far-future dates (e.g. 2226) to mean never expires. */
-const NEVER_EXPIRE_YEAR = 2099;
+/**
+ * Billing cycle (days) → semantic label, matching Komari's renewal mapping
+ * (27–32=month, 87–95=quarter, 175–185=half-year, 360–370=year, …).
+ * Non-positive cycles (e.g. -1) mean a one-time / lifetime price → "一次性/Once".
+ */
+export function formatBillingCycle(days: number): string {
+  if (!Number.isFinite(days) || days <= 0) return i18n.t("billing.once");
+  if (days >= 27 && days <= 32) return i18n.t("billing.monthly");
+  if (days >= 87 && days <= 95) return i18n.t("billing.quarterly");
+  if (days >= 175 && days <= 185) return i18n.t("billing.semiannual");
+  if (days >= 360 && days <= 370) return i18n.t("billing.yearly");
+  if (days >= 720 && days <= 750) return i18n.t("billing.biennial");
+  if (days >= 1080 && days <= 1150) return i18n.t("billing.triennial");
+  if (days >= 1800 && days <= 1850) return i18n.t("time.years", { count: 5 });
+  return i18n.t("time.days", { count: days });
+}
+
+/** Komari uses far-future dates (e.g. 2226) to mean never expires.
+ *  Spec: an expiry more than 100 years in the future is treated as permanent. */
 const NEVER_EXPIRE_DAYS = 36500;
 
 export function isNeverExpire(expiredAt: string | null | undefined): boolean {
   if (!expiredAt) return true;
   const exp = new Date(expiredAt);
   if (!Number.isFinite(exp.getTime())) return false;
-  if (exp.getUTCFullYear() >= NEVER_EXPIRE_YEAR) return true;
   const days = (exp.getTime() - Date.now()) / 86400000;
   return days >= NEVER_EXPIRE_DAYS;
 }
@@ -66,7 +82,7 @@ export function percentOf(used: number, total: number): number {
 
 /**
  * Traffic used bytes per Komari traffic_limit_type:
- * max | sum | up | down (default max).
+ * sum (双向) | max (取大) | min (取小) | up (出站) | down (入站). Default max.
  */
 export function trafficUsedBytes(
   totalUp: number,
@@ -78,6 +94,8 @@ export function trafficUsedBytes(
   switch ((limitType || "max").toLowerCase()) {
     case "sum":
       return up + down;
+    case "min":
+      return Math.min(up, down);
     case "up":
       return up;
     case "down":
@@ -86,6 +104,39 @@ export function trafficUsedBytes(
     default:
       return Math.max(up, down);
   }
+}
+
+/** Localized label for Komari traffic_limit_type (max/sum/min/up/down). */
+export function trafficLimitTypeLabel(limitType?: string | null): string {
+  switch ((limitType || "max").toLowerCase()) {
+    case "sum":
+      return i18n.t("trafficType.sum");
+    case "min":
+      return i18n.t("trafficType.min");
+    case "up":
+      return i18n.t("trafficType.up");
+    case "down":
+      return i18n.t("trafficType.down");
+    default:
+      return i18n.t("trafficType.max");
+  }
+}
+
+/**
+ * Billing cycle (days) → number of calendar months, matching Komari's renewal
+ * mapping (27–32→1, 87–95→3, 175–185→6, 360–370→12, …). Used for monthly cost.
+ * Falls back to days/30 for non-standard cycles. 0 for non-positive cycles.
+ */
+export function billingCycleMonths(days: number): number {
+  if (!Number.isFinite(days) || days <= 0) return 0;
+  if (days >= 27 && days <= 32) return 1;
+  if (days >= 87 && days <= 95) return 3;
+  if (days >= 175 && days <= 185) return 6;
+  if (days >= 360 && days <= 370) return 12;
+  if (days >= 720 && days <= 750) return 24;
+  if (days >= 1080 && days <= 1150) return 36;
+  if (days >= 1800 && days <= 1850) return 60;
+  return days / 30;
 }
 
 export function parseTags(tags: string): string[] {

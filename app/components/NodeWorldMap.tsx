@@ -13,32 +13,13 @@ import {
 import { resolveNodeMapPoints } from "~/lib/geo";
 import { layoutMapMarkers, type MapMarker } from "~/lib/map-cluster";
 import { getRegionCode } from "~/lib/region";
+import { getCountryNumericId } from "~/lib/countries";
 import type { NodeInfo } from "~/types/komari";
 // Bundled locally so the map renders offline (no jsdelivr dependency).
 import worldGeo from "~/data/countries-110m.json";
 
 const DEFAULT_CENTER: [number, number] = [12, 6];
 const DEFAULT_ZOOM = 1;
-
-const ALPHA2_TO_NUM: Record<string, string> = {
-  SG: "702",
-  US: "840",
-  DE: "276",
-  JP: "392",
-  CN: "156",
-  HK: "344",
-  AU: "036",
-  TW: "158",
-  KR: "410",
-  GB: "826",
-  FR: "250",
-  CA: "124",
-  NL: "528",
-  IN: "356",
-  BR: "076",
-  RU: "643",
-  IE: "372",
-};
 
 interface NodeWorldMapProps {
   nodes: NodeInfo[];
@@ -77,8 +58,9 @@ export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
     for (const n of nodes) {
       const alpha = getRegionCode(n.region);
       if (!alpha) continue;
-      const num = ALPHA2_TO_NUM[alpha];
+      const num = getCountryNumericId(alpha);
       if (num) ids.add(num);
+      // Hong Kong is not a separate geometry in world-atlas — highlight CN.
       if (alpha === "HK") ids.add("156");
     }
     return ids;

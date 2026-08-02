@@ -16,15 +16,17 @@ import { useNavigate } from "react-router";
 import { QuickIcon } from "~/components/BrandIcon";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
+  formatBillingCycle,
   formatBytes,
   formatRate,
   formatUptime,
   parseTags,
   percentOf,
+  trafficLimitTypeLabel,
   trafficUsedBytes,
 } from "~/lib/format";
 import { getArchIcon, getOsIcon } from "~/lib/os-arch";
-import { pickThreeNetworks } from "~/lib/ping-display";
+import { pickDisplayNetworks } from "~/lib/ping-display";
 import type { NodeInfo, RealtimeMetrics } from "~/types/komari";
 
 interface NodeTableProps {
@@ -97,12 +99,13 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
           : 0;
         const tPct = n.traffic_limit > 0 ? percentOf(tUsed, n.traffic_limit) : 0;
         const tags = parseTags(n.tags);
+        const cycle = formatBillingCycle(n.billing_cycle);
         const price =
           n.price < 0
             ? t("detail.free")
             : n.price === 0
               ? ""
-              : `${n.currency}${n.price}${n.billing_cycle > 0 ? `/${n.billing_cycle}${t("detail.days")}` : ""}`;
+              : `${n.currency}${n.price}${cycle ? `/${cycle}` : ""}`;
 
         return {
           id: n.uuid,
@@ -133,7 +136,7 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
           _netDown: m ? formatRate(m.network.down) : "—",
           _uptime: formatUptime(m?.uptime ?? 0),
           _price: price,
-          _threeNets: pickThreeNetworks(m?.ping),
+          _nets: pickDisplayNetworks(m?.ping),
         };
       }),
     [nodes, onlineSet, realtime, t],
@@ -290,7 +293,7 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                           pct={d._tPct}
                           sub={
                             d._tLimit > 0
-                              ? `${formatBytes(d._tUsed)} / ${formatBytes(d._tLimit)}`
+                              ? `${formatBytes(d._tUsed)} / ${formatBytes(d._tLimit)} · ${trafficLimitTypeLabel(d._n.traffic_limit_type)}`
                               : "∞"
                           }
                         />
@@ -311,21 +314,31 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
 
                       <TableCell>
                         <div className="table-isp-cell">
-                          {d._threeNets.map((net) => (
-                            <span
-                              key={net.category}
-                              className="table-isp-cell__line mono"
-                            >
-                              <span className="table-isp-cell__name">
-                                {net.category === "CT" ? t("metrics.ct") : net.category === "CU" ? t("metrics.cu") : t("metrics.cm")}
+                          {d._nets.map((net) => {
+                            const label =
+                              net.label === "CT"
+                                ? t("metrics.ct")
+                                : net.label === "CU"
+                                  ? t("metrics.cu")
+                                  : net.label === "CM"
+                                    ? t("metrics.cm")
+                                    : net.label;
+                            return (
+                              <span
+                                key={`${net.label}-${net.name}`}
+                                className="table-isp-cell__line mono"
+                              >
+                                <span className="table-isp-cell__name">
+                                  {label}
+                                </span>
+                                <span className="table-isp-cell__val">
+                                  {net.latencyMs != null
+                                    ? `${net.latencyMs}ms`
+                                    : "—"}
+                                </span>
                               </span>
-                              <span className="table-isp-cell__val">
-                                {net.latencyMs != null
-                                  ? `${net.latencyMs}ms`
-                                  : "—"}
-                              </span>
-                            </span>
-                          ))}
+                            );
+                          })}
                         </div>
                       </TableCell>
                     </TableRow>

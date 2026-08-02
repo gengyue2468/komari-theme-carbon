@@ -1,7 +1,7 @@
 import { Popover, PopoverContent, Tile } from "@carbon/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { formatBytes, formatRate, percentOf } from "~/lib/format";
+import { formatBytes, formatRate, percentOf, trafficUsedBytes } from "~/lib/format";
 import type { HomeStatItem } from "~/lib/home-stats";
 import type { NodeInfo, RealtimeMetrics } from "~/types/komari";
 
@@ -62,10 +62,13 @@ function trafficBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMe
   return nodes
     .map((n) => {
       const m = realtime[n.uuid];
+      const up = m?.network.totalUp ?? 0;
+      const down = m?.network.totalDown ?? 0;
       return {
         name: n.name,
-        value: formatBytes(Math.max(m?.network.totalUp ?? 0, m?.network.totalDown ?? 0)),
-        detail: `↑ ${formatBytes(m?.network.totalUp ?? 0)} · ↓ ${formatBytes(m?.network.totalDown ?? 0)}`,
+        // Respect each node's traffic_limit_type: sum (双向), max (取大), up (出站), down.
+        value: formatBytes(trafficUsedBytes(up, down, n.traffic_limit_type)),
+        detail: `↑ ${formatBytes(up)} · ↓ ${formatBytes(down)}`,
         pct: 0,
       };
     })
@@ -77,20 +80,30 @@ function rateBreakdown(
   nodes: NodeInfo[],
   realtime: Record<string, RealtimeMetrics>,
   onlineIds: string[],
+  primary: "up" | "down",
 ): BreakdownRow[] {
   const online = new Set(onlineIds);
   return nodes
     .filter((n) => online.has(n.uuid))
     .map((n) => {
       const m = realtime[n.uuid];
-      return {
-        name: n.name,
-        value: formatRate(m?.network.up ?? 0),
-        detail: formatRate(m?.network.down ?? 0),
-        pct: 0,
-      };
+      const up = formatRate(m?.network.up ?? 0);
+      const down = formatRate(m?.network.down ?? 0);
+      return primary === "up"
+        ? {
+            name: n.name,
+            value: `↑ ${up}`,
+            detail: `↓ ${down}`,
+            pct: 0,
+          }
+        : {
+            name: n.name,
+            value: `↓ ${down}`,
+            detail: `↑ ${up}`,
+            pct: 0,
+          };
     })
-    .sort((a, b) => b.detail.localeCompare(a.detail, undefined, { numeric: true }))
+    .sort((a, b) => b.value.localeCompare(a.value, undefined, { numeric: true }))
     .slice(0, 12);
 }
 
@@ -137,13 +150,9 @@ export function StatPopover({
       case "traffic":
         return trafficBreakdown(nodes, realtime);
       case "uplink":
-        return rateBreakdown(nodes, realtime, onlineIds);
+        return rateBreakdown(nodes, realtime, onlineIds, "up");
       case "downlink":
-        return rateBreakdown(nodes, realtime, onlineIds).map((r) => ({
-          ...r,
-          value: r.detail,
-          detail: r.value,
-        }));
+        return rateBreakdown(nodes, realtime, onlineIds, "down");
       default:
         return [];
     }

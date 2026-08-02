@@ -103,7 +103,7 @@ function baseChartOptions(
         ...(domain ? { domain } : { includeZero: true }),
       },
     },
-    curve: "curveMonotoneX",
+    curve: "curveNatural",
     height: "200px",
     theme,
     toolbar: { enabled: false },
@@ -126,7 +126,8 @@ type MetricId =
   | "disk"
   | "network"
   | "connections"
-  | "process";
+  | "process"
+  | "gpu";
 
 interface MetricChartData {
   title: string;
@@ -200,7 +201,6 @@ function LoadRangeTabs({
       <TabList
         aria-label={ariaLabel}
         contained
-        scrollIntoView
         className="chart-range-tabs"
       >
         {ranges.map((r) => (
@@ -292,7 +292,10 @@ export function LoadChart({ uuid }: LoadChartProps) {
       const list = [...res.records].sort(
         (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime(),
       );
-      return isLive ? list.slice(-120) : list;
+      return {
+        records: isLive ? list.slice(-120) : list,
+        hasGpu: Boolean(res.has_gpu_data),
+      };
     },
     staleTime: isLive ? Math.max(pollMs || 3000, 2000) : 0,
     gcTime: 60_000,
@@ -302,8 +305,8 @@ export function LoadChart({ uuid }: LoadChartProps) {
   });
 
   // Live: keep previous series while soft-refetching. History: hide data while fetching.
-  const records =
-    !isLive && loadQuery.isFetching ? [] : (loadQuery.data ?? []);
+  const records = !isLive && loadQuery.isFetching ? [] : (loadQuery.data?.records ?? []);
+  const hasGpu = loadQuery.data?.hasGpu ?? false;
   const loading =
     loadQuery.isPending ||
     (!isLive && loadQuery.isFetching) ||
@@ -397,6 +400,16 @@ export function LoadChart({ uuid }: LoadChartProps) {
     [series, t],
   );
 
+  const gpuData = useMemo<ChartPoint[]>(
+    () =>
+      series.map((r) => ({
+        group: t("metrics.gpu"),
+        date: new Date(r.time),
+        value: Number(r.gpu.toFixed(2)),
+      })),
+    [series, t],
+  );
+
   const language = i18n.language;
   const pctFormatter = useMemo(
     () => makeTooltipValueFormatter(language, (v) => `${v}%`),
@@ -469,6 +482,15 @@ export function LoadChart({ uuid }: LoadChartProps) {
       tooltip: { valueFormatter: countFormatter },
     }),
     [theme, chartLocale, t, timeTitle, countFormatter],
+  );
+
+  const gpuOpts = useMemo<AreaChartOptions>(
+    () => ({
+      ...baseChartOptions(theme, [0, 100], t("metrics.gpu"), chartLocale, timeTitle),
+      color: { scale: { [t("metrics.gpu")]: "var(--cds-interactive)" } },
+      tooltip: { valueFormatter: pctFormatter },
+    }),
+    [theme, chartLocale, t, timeTitle, pctFormatter],
   );
 
   const netOpts = useMemo<LineChartOptions>(
@@ -565,7 +587,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
     [t],
   );
 
-  const metricCharts: Record<MetricId, MetricChartData> = {
+  const metricCharts: Partial<Record<MetricId, MetricChartData>> = {
     cpu: {
       title: t("metrics.cpu"),
       meta: latest ? `${latest.cpu.toFixed(1)}%` : undefined,
@@ -616,9 +638,21 @@ export function LoadChart({ uuid }: LoadChartProps) {
       options: procOpts,
       kind: "area",
     },
+    // GPU history is only present when Komari reports it (has_gpu_data).
+    ...(hasGpu
+      ? {
+          gpu: {
+            title: t("metrics.gpu"),
+            meta: latest ? `${latest.gpu.toFixed(1)}%` : undefined,
+            data: gpuData,
+            options: gpuOpts,
+            kind: "area",
+          } satisfies MetricChartData,
+        }
+      : {}),
   };
 
-  const dialogChart = dialogMetric ? metricCharts[dialogMetric] : null;
+  const dialogChart = dialogMetric ? (metricCharts[dialogMetric] ?? null) : null;
 
   return (
     <div className="load-chart-panel">
@@ -638,13 +672,17 @@ export function LoadChart({ uuid }: LoadChartProps) {
         <p className="empty">{t("detail.noLoadData")}</p>
       ) : (
         <div className="load-chart-grid">
-          {(Object.keys(metricCharts) as MetricId[]).map((id) => (
-            <MetricChart
-              key={id}
-              {...metricCharts[id]}
-              onOpen={() => setDialogMetric(id)}
-            />
-          ))}
+          {(Object.keys(metricCharts) as MetricId[]).map((id) => {
+            const chart = metricCharts[id];
+            if (!chart) return null;
+            return (
+              <MetricChart
+                key={id}
+                {...chart}
+                onOpen={() => setDialogMetric(id)}
+              />
+            );
+          })}
         </div>
       )}
 

@@ -1,5 +1,6 @@
 import type { NodePingLive, RealtimeMetrics } from "~/types/komari";
 import type { PingHistoryResponse } from "~/types/komari";
+import i18n from "~/i18n";
 import { ISP_COLORS, PING_TASK_COLORS } from "~/lib/ping-tone";
 
 export interface PingNetworkDisplay {
@@ -88,6 +89,34 @@ export function pickThreeNetworks(
   }));
 }
 
+/** True when at least one live ping task name matches CT/CU/CM keywords. */
+export function hasIspPingTasks(ping?: Record<string, NodePingLive>): boolean {
+  if (!ping) return false;
+  return Object.values(ping).some((p) => categorizeIsp(p.name) != null);
+}
+
+/**
+ * Card / table ISP strip: use 三网 when Chinese ISP tasks exist; otherwise list
+ * all live ping tasks (international nodes).
+ */
+export function pickDisplayNetworks(
+  ping?: Record<string, NodePingLive>,
+): { label: string; latencyMs: number | null; name: string }[] {
+  if (!ping) return [];
+  if (hasIspPingTasks(ping)) {
+    return pickThreeNetworks(ping).map((n) => ({
+      label: n.category,
+      latencyMs: n.latencyMs,
+      name: n.name,
+    }));
+  }
+  return Object.values(ping).map((p) => ({
+    label: p.name,
+    latencyMs: p.latest >= 0 ? Math.round(p.latest) : null,
+    name: p.name,
+  }));
+}
+
 /**
  * Card spark: one bar per live ping task (real latency/loss snapshot). No
  * synthetic data — realtime status only carries current values, so we show
@@ -145,6 +174,8 @@ export interface PingChartTask {
   max: number | null;
   lossPct: number;
   samples: number;
+  type?: string;
+  interval?: number;
 }
 
 export interface PingChartPoint {
@@ -179,6 +210,8 @@ export function buildPingChartModel(
       max: t.max ?? null,
       lossPct: t.loss ?? 0,
       samples: t.total ?? 0,
+      type: t.type,
+      interval: t.interval,
     });
   }
 
@@ -187,8 +220,8 @@ export function buildPingChartModel(
     if (!taskMap.has(r.task_id)) {
       taskMap.set(r.task_id, {
         id,
-        name: `Task ${r.task_id}`,
-        color: colorFor(`Task ${r.task_id}`, r.task_id),
+        name: i18n.t("detail.task", { id: r.task_id }),
+        color: colorFor(i18n.t("detail.task", { id: r.task_id }), r.task_id),
         latest: null,
         avg: null,
         min: null,

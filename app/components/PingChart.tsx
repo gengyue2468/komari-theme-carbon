@@ -170,7 +170,7 @@ export function PingChart({ uuid, online }: PingChartProps) {
           includeZero: true,
         },
       },
-      curve: "curveMonotoneX",
+      curve: "curveNatural",
       height: "320px",
       theme,
       toolbar: { enabled: false },
@@ -230,7 +230,6 @@ export function PingChart({ uuid, online }: PingChartProps) {
             <TabList
               aria-label={t("detail.pingChart")}
               contained
-              scrollIntoView
               className="chart-range-tabs"
             >
               {availableRanges.map((r) => (
@@ -296,6 +295,13 @@ export function PingChart({ uuid, online }: PingChartProps) {
                     <span>
                       {t("metrics.loss")} {task.lossPct.toFixed(1)}%
                     </span>
+                    {task.type || task.interval ? (
+                      <span className="ping-task-card__meta">
+                        {[task.type, task.interval ? `${task.interval}s` : ""]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </button>

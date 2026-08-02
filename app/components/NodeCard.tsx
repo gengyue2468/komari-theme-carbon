@@ -3,16 +3,18 @@ import { ArrowDown, ArrowUp } from "@carbon/icons-react";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
-import { cardPingFromMetrics, pickThreeNetworks } from "~/lib/ping-display";
+import { cardPingFromMetrics, pickDisplayNetworks } from "~/lib/ping-display";
 import { barToneClass, latencyToneClass } from "~/lib/ping-tone";
 import { QuickIcon } from "~/components/BrandIcon";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
+  formatBillingCycle,
   formatBytes,
   formatRate,
   formatUptime,
   parseTags,
   percentOf,
+  trafficLimitTypeLabel,
   trafficUsedBytes,
 } from "~/lib/format";
 import { getArchIcon, getOsIcon, getVirtIcon } from "~/lib/os-arch";
@@ -122,12 +124,13 @@ function StatGroup({ node, online, metrics, showUptime }: NodeCardProps) {
   const trafficPct =
     node.traffic_limit > 0 ? percentOf(trafficUsed, node.traffic_limit) : 0;
 
+  const cycle = formatBillingCycle(node.billing_cycle);
   const price =
     node.price < 0
       ? t("detail.free")
       : node.price === 0
         ? "—"
-        : `${node.currency}${node.price}/${node.billing_cycle}${t("detail.days")}`;
+        : `${node.currency}${node.price}${cycle ? `/${cycle}` : ""}`;
 
   const ramUsed = metrics ? formatBytes(metrics.ram.used) : "—";
   const ramTotal = formatBytes(node.mem_total);
@@ -142,7 +145,7 @@ function StatGroup({ node, online, metrics, showUptime }: NodeCardProps) {
           <Kv label={t("metrics.cpu")} value={cpu.toFixed(0)} unit="%" hint={metrics ? `${metrics.load.load1.toFixed(2)}, ${metrics.load.load5.toFixed(2)}, ${metrics.load.load15.toFixed(2)}` : "—"} />
           <Kv label={t("metrics.ram")} value={ram.toFixed(0)} unit="%" hint={`${ramUsed} / ${ramTotal}`} />
           <Kv label={t("metrics.disk")} value={disk.toFixed(0)} unit="%" hint={`${diskUsed} / ${diskTotal}`} />
-          <Kv label={t("metrics.traffic")} value={trafficPct.toFixed(0)} unit="%" hint={node.traffic_limit > 0 ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)}` : "∞"} />
+          <Kv label={t("metrics.traffic")} value={trafficPct.toFixed(0)} unit="%" hint={node.traffic_limit > 0 ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)} · ${trafficLimitTypeLabel(node.traffic_limit_type)}` : "∞"} />
         </div>
       </section>
 
@@ -166,23 +169,29 @@ function StatGroup({ node, online, metrics, showUptime }: NodeCardProps) {
 function SectionPing({ metrics }: { metrics?: RealtimeMetrics }) {
   const { t } = useTranslation();
   const ping = useMemo(() => cardPingFromMetrics(metrics), [metrics]);
-  const threeNets = useMemo(
-    () => pickThreeNetworks(metrics?.ping),
+  const nets = useMemo(
+    () => pickDisplayNetworks(metrics?.ping),
     [metrics?.ping],
   );
 
-  const ispLabel = (cat: "CT" | "CU" | "CM") =>
-    cat === "CT" ? t("metrics.ct") : cat === "CU" ? t("metrics.cu") : t("metrics.cm");
+  const ispLabel = (label: string) =>
+    label === "CT"
+      ? t("metrics.ct")
+      : label === "CU"
+        ? t("metrics.cu")
+        : label === "CM"
+          ? t("metrics.cm")
+          : label;
 
   return (
     <section className="card-section">
       <h3 className="card-section__title">{t("metrics.isp")}</h3>
-      {threeNets.length > 0 ? (
+      {nets.length > 0 ? (
         <div className="card-isp mono">
-          {threeNets.map((net) => (
-            <span key={net.category}>
+          {nets.map((net) => (
+            <span key={`${net.label}-${net.name}`}>
               <span className={net.latencyMs != null ? latencyToneClass(net.latencyMs) : undefined}>
-                {ispLabel(net.category)}
+                {ispLabel(net.label)}
               </span>
               <span className="card-isp__val">{net.latencyMs != null ? `${net.latencyMs}ms` : "—"}</span>
             </span>
@@ -192,7 +201,7 @@ function SectionPing({ metrics }: { metrics?: RealtimeMetrics }) {
         <span className="card-row__value mono">N/A</span>
       )}
       <div className="card-spark-grid">
-        <Spark label={t("metrics.latency")} display={ping.avgLatencyMs > 0 ? `${ping.avgLatencyMs} ms` : "N/A"} metric="latency" bars={ping.bars} />
+        <Spark label={t("metrics.latency")} display={ping.avgLatencyMs > 0 ? `${ping.avgLatencyMs} ms` : "—"} metric="latency" bars={ping.bars} />
         <Spark label={t("metrics.loss")} display={`${ping.avgLossPct.toFixed(1)}%`} metric="loss" bars={ping.bars} />
       </div>
     </section>

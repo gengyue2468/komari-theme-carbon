@@ -282,11 +282,27 @@ export interface RpcNodeStatusPing {
   max: number;
 }
 
+export interface RpcGpuDeviceInfo {
+  name?: string;
+  memory_total?: number;
+  memory_used?: number;
+  utilization?: number;
+  temperature?: number;
+}
+
+export interface RpcGpuDetail {
+  count?: number;
+  average_usage?: number;
+  detailed_info?: RpcGpuDeviceInfo[];
+}
+
 export interface RpcNodeStatus {
   client: string;
   time: string;
   cpu: number;
   gpu: number;
+  /** Nested GPU report when available (WS / richer payloads). */
+  gpu_detail?: RpcGpuDetail;
   ram: number;
   ram_total: number;
   swap: number;
@@ -306,6 +322,7 @@ export interface RpcNodeStatus {
   connections_udp: number;
   online: boolean;
   uptime: number;
+  message?: string;
   ping?: Record<string, RpcNodeStatusPing>;
 }
 
@@ -328,6 +345,8 @@ export interface RpcStatusRecord {
   net_out: number;
   net_total_up: number;
   net_total_down: number;
+  traffic_up?: number;
+  traffic_down?: number;
   process: number;
   connections: number;
   connections_udp: number;

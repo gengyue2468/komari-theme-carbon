@@ -55,16 +55,11 @@ const ICONS: Record<
 };
 
 const HOME_UI_KEY = "komari-carbon-home-ui";
-const HOME_SCROLL_KEY = "komari-carbon-home-scroll";
 
 interface HomeUiState {
   group: string;
   search: string;
   searchOpen: boolean;
-}
-
-interface HomeScrollState {
-  scrollY: number;
 }
 
 function readJson<T>(key: string): T | null {
@@ -115,8 +110,6 @@ export default function Home() {
   const [searchOpen, setSearchOpen] = useState(saved?.searchOpen ?? false);
   const [search, setSearch] = useState(saved?.search ?? "");
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const scrollRestored = useRef(false);
-  const [scrollTrack, setScrollTrack] = useState(false);
 
   const groupTabs = useMemo(() => {
     const names = [...new Set(nodes.map((n) => n.group).filter(Boolean))].sort();
@@ -170,56 +163,6 @@ export default function Home() {
   useEffect(() => {
     writeJson(HOME_UI_KEY, { group, search, searchOpen });
   }, [group, search, searchOpen]);
-
-  // Restore scroll after back navigation once nodes are ready, then enable
-  // (throttled) scroll persistence.
-  useEffect(() => {
-    if (scrollRestored.current) return;
-    if (!canRestore) {
-      scrollRestored.current = true;
-      setScrollTrack(true);
-      return;
-    }
-    const y =
-      readJson<HomeScrollState>(HOME_SCROLL_KEY)?.scrollY ?? 0;
-    if (y <= 0) {
-      scrollRestored.current = true;
-      setScrollTrack(true);
-      return;
-    }
-    if (nodes.length === 0) return;
-    scrollRestored.current = true;
-    setScrollTrack(true);
-    const id = window.requestAnimationFrame(() => {
-      window.scrollTo({ top: y, behavior: "instant" });
-    });
-    return () => window.cancelAnimationFrame(id);
-  }, [canRestore, nodes.length]);
-
-  // Throttled scroll persistence. Mounted only after the back-nav restore has
-  // completed, so it never overwrites the saved position on entry.
-  useEffect(() => {
-    if (!scrollTrack) return;
-    let timer: number | undefined;
-    let lastY = window.scrollY;
-    const onScroll = () => {
-      lastY = window.scrollY;
-      if (timer != null) return;
-      timer = window.setTimeout(() => {
-        timer = undefined;
-        writeJson(HOME_SCROLL_KEY, { scrollY: window.scrollY });
-      }, 250);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      if (timer != null) {
-        window.clearTimeout(timer);
-        timer = undefined;
-        writeJson(HOME_SCROLL_KEY, { scrollY: lastY });
-      }
-    };
-  }, [scrollTrack]);
 
   const closeSearch = () => {
     setSearchOpen(false);
@@ -280,7 +223,6 @@ export default function Home() {
             <TabList
               aria-label={t("detail.group")}
               contained
-              scrollIntoView
               className="home-group-tabs"
             >
               {groupTabs.map((tab) => (

@@ -51,7 +51,7 @@ export function mapClientsToNodes(
 ): NodeInfo[] {
   return Object.values(map)
     .map(mapClientToNodeInfo)
-    // Emerald / admin: smaller weight first
+    // Smaller weight first (matches admin / Emerald ordering)
     .sort((a, b) => a.weight - b.weight || a.name.localeCompare(b.name));
 }
 
@@ -73,11 +73,37 @@ function mapPing(
   return out;
 }
 
+function mapGpu(
+  s: RpcNodeStatus | (RpcStatusRecord & { online?: boolean; uptime?: number; ping?: RpcNodeStatus["ping"]; message?: string; gpu_detail?: RpcNodeStatus["gpu_detail"] }),
+): RealtimeMetrics["gpu"] {
+  const detail = "gpu_detail" in s ? s.gpu_detail : undefined;
+  const devices = detail?.detailed_info ?? [];
+  if (detail && ((detail.count ?? 0) > 0 || devices.length > 0)) {
+    return {
+      count: (detail.count ?? devices.length) || 1,
+      average_usage: (detail.average_usage ?? Number(s.gpu)) || 0,
+      detailed_info: devices.map((d) => ({
+        name: d.name || "",
+        memory_total: d.memory_total ?? 0,
+        memory_used: d.memory_used ?? 0,
+        utilization: d.utilization ?? 0,
+        temperature: d.temperature ?? 0,
+      })),
+    };
+  }
+  if (s.gpu != null) {
+    return { count: 1, average_usage: s.gpu, detailed_info: [] };
+  }
+  return undefined;
+}
+
 export function mapStatusToMetrics(
-  s: RpcNodeStatus | (RpcStatusRecord & { online?: boolean; uptime?: number; ping?: RpcNodeStatus["ping"] }),
+  s: RpcNodeStatus | (RpcStatusRecord & { online?: boolean; uptime?: number; ping?: RpcNodeStatus["ping"]; message?: string; gpu_detail?: RpcNodeStatus["gpu_detail"] }),
 ): RealtimeMetrics {
   return {
     cpu: { usage: s.cpu ?? 0 },
+    gpu: mapGpu(s),
+    temp: s.temp != null ? s.temp : undefined,
     ram: { total: s.ram_total ?? 0, used: s.ram ?? 0 },
     swap: { total: s.swap_total ?? 0, used: s.swap ?? 0 },
     load: {
@@ -98,7 +124,7 @@ export function mapStatusToMetrics(
     },
     uptime: ("uptime" in s ? s.uptime : 0) ?? 0,
     process: s.process ?? 0,
-    message: "",
+    message: ("message" in s && typeof s.message === "string" ? s.message : "") || "",
     updated_at: s.time || new Date().toISOString(),
     ping: mapPing("ping" in s ? s.ping : undefined),
   };
@@ -131,7 +157,8 @@ function statusFingerprint(s: RpcNodeStatus): string {
   const parts = [
     s.time ?? "",
     s.cpu,
-    s.gpu,
+    s.gpu ?? "",
+    s.temp ?? "",
     s.ram,
     s.ram_total,
     s.swap,
@@ -151,7 +178,18 @@ function statusFingerprint(s: RpcNodeStatus): string {
     s.connections_udp,
     s.uptime,
     s.online ? 1 : 0,
+    s.message ?? "",
   ];
+  if (s.gpu_detail?.detailed_info?.length) {
+    parts.push(
+      s.gpu_detail.detailed_info
+        .map(
+          (d) =>
+            `${d.name}:${d.utilization}:${d.memory_used}:${d.temperature}`,
+        )
+        .join(","),
+    );
+  }
   if (s.ping) {
     parts.push(
       Object.entries(s.ping)
@@ -194,6 +232,8 @@ export function mapStatusRecordToLoad(r: RpcStatusRecord): LoadRecord {
     net_out: Number(r.net_out) || 0,
     net_total_up: Number(r.net_total_up) || 0,
     net_total_down: Number(r.net_total_down) || 0,
+    traffic_up: Number(r.traffic_up) || 0,
+    traffic_down: Number(r.traffic_down) || 0,
     process: Number(r.process) || 0,
     connections: Number(r.connections) || 0,
     connections_udp: Number(r.connections_udp) || 0,

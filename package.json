@@ -1,7 +1,7 @@
 {
   "name": "komari-theme-carbon",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "IBM Carbon + IBM Plex theme for Komari Monitor",
   "author": "gengyue2468",
   "license": "MIT",
@@ -38,11 +38,13 @@
     "isbot": "^5.1.36",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-fast-marquee": "^1.6.5",
     "react-i18next": "^17.0.11",
     "react-is": "^19.2.8",
     "react-router": "^8",
     "react-simple-maps": "^3.0.0",
     "sass": "^1.102.0",
+    "world-countries": "^5.1.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

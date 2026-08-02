@@ -55,6 +55,17 @@ html[data-carbon-theme="g100"] {
   @include theme(themes.$g100);
 }
 
+/* Smooth programmatic scrolling (route changes scroll to top) */
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 *,
 *::before,
 *::after {
@@ -1413,10 +1424,30 @@ html[data-carbon-theme="g100"] .table-rate__down {
 
 .detail-top__left {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: $spacing-03;
   min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+
+  /* All siblings stay at natural width; only the title h1 grows/shrinks. */
+  > .cds--btn,
+  .detail-flag,
+  .status-dot,
+  .cds--tag {
+    flex: 0 0 auto;
+  }
+
+  /* Don't truncate tag text in the title row */
+  .cds--tag {
+    max-width: none;
+  }
+  .cds--tag .cds--tag__label {
+    overflow: visible;
+    text-overflow: unset;
+    white-space: nowrap;
+  }
 }
 
 .detail-remark {
@@ -1430,20 +1461,55 @@ html[data-carbon-theme="g100"] .table-rate__down {
   word-break: break-word;
 }
 
+.detail-agent-message {
+  margin: 0;
+  padding: $spacing-04 $spacing-05;
+  background: $layer-01;
+  border-inline-start: 3px solid $support-warning;
+  @include type-style("body-compact-01");
+  color: $text-primary;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.detail-gpu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: $spacing-05;
+}
+
 .detail-title {
   @include type-style("productive-heading-03");
   margin: 0;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: $spacing-03;
   min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.detail-title__marquee {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detail-title__name {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-title__marquee .rfm-marquee {
+    animation-play-state: paused !important;
+  }
 }
 
 .detail-flag {
   width: 1.5rem;
   height: auto;
   border: 1px solid $border-subtle-01;
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 
 .detail-finance-grid {
@@ -1524,6 +1590,11 @@ html[data-carbon-theme="g100"] .table-rate__down {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: $spacing-05;
+}
+
+/* With a GPU card there are 5 live cells — widen to 5 cols so no row is partial */
+.detail-live-grid.is-gpu {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .detail-info-grid {
@@ -1943,10 +2014,15 @@ html[data-carbon-theme="g100"] .rate-pair__down {
 
 .ping-task-card__stats {
   display: flex;
-  flex-wrap: wrap;
-  gap: $spacing-03;
+  justify-content: space-between;
+  gap: $spacing-02;
   @include type-style("helper-text-01");
   color: $text-secondary;
+}
+
+.ping-task-card__meta {
+  color: $text-secondary;
+  margin-inline-start: auto;
 }
 
 .ping-chart-main.cds--tile {
@@ -1980,6 +2056,10 @@ html[data-carbon-theme="g100"] .rate-pair__down {
 @media (max-width: 66rem) {
   .detail-finance-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-live-grid.is-gpu {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .detail-info-grid {
@@ -2033,7 +2113,7 @@ html[data-carbon-theme="g100"] .rate-pair__down {
   height: 0.5rem;
   border-radius: 50%;
   background: $support-error;
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 
 .status-dot.is-on {
@@ -2180,8 +2260,9 @@ html[data-carbon-theme="g100"] .rate-pair__down {
     width: min(18rem, 92vw);
   }
 
-  /* detail live & finance grids -> 2-col */
+  /* detail live & finance grids -> 2-col (also wins over .is-gpu 5-col) */
   .detail-live-grid,
+  .detail-live-grid.is-gpu,
   .detail-finance-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

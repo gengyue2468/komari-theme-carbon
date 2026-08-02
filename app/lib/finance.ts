@@ -1,4 +1,4 @@
-import { isNeverExpire } from "~/lib/format";
+import { billingCycleMonths, isNeverExpire } from "~/lib/format";
 import type { NodeInfo } from "~/types/komari";
 
 const FINANCE_CURRENCY_CONFIG = {
@@ -66,7 +66,6 @@ export const CURRENCY_SYMBOLS = Object.fromEntries(
 
 const CACHE_KEY = "komari_finance_rates_cny_v1";
 const MS_DAY = 86_400_000;
-const MONTH_DAYS = 30;
 const FIN_CURRENCY_KEY = "fin_currency";
 
 const ALIASES: Record<string, CurrencyCode> = {
@@ -121,9 +120,9 @@ export function calcMonthlyCny(nodes: NodeInfo[], rates: ExchangeRates): number 
   return nodes.reduce((sum, n) => {
     const p = priceToCny(n, rates);
     if (p <= 0) return sum;
-    const cycle = Number(n.billing_cycle);
-    if (!Number.isFinite(cycle) || cycle <= 0) return sum;
-    return sum + (p / cycle) * MONTH_DAYS;
+    const months = billingCycleMonths(Number(n.billing_cycle));
+    if (months <= 0) return sum;
+    return sum + p / months;
   }, 0);
 }
 
@@ -149,9 +148,10 @@ export function calcRemainingCny(
 export function formatFinanceAmount(
   amount: number,
   currency: CurrencyCode,
+  language = "zh-CN",
 ): { currency: CurrencyCode; symbol: string; value: string } {
   const safe = Number.isFinite(amount) ? amount : 0;
-  const value = new Intl.NumberFormat("zh-CN", {
+  const value = new Intl.NumberFormat(language, {
     maximumFractionDigits: 2,
     minimumFractionDigits: Math.abs(safe) < 100_000 ? 2 : 0,
     notation: Math.abs(safe) >= 100_000 ? "compact" : "standard",
@@ -198,6 +198,12 @@ function writeCache(rates: ExchangeRates) {
   } catch {
     // ignore
   }
+}
+
+/** Today's cached rates if already fetched (synchronous, no network). */
+export function readStoredRates(): ExchangeRates | null {
+  if (typeof localStorage === "undefined") return null;
+  return readCache();
 }
 
 async function fetchRates(): Promise<ExchangeRates | null> {
@@ -249,13 +255,14 @@ export function buildFinanceSummary(
   nodes: NodeInfo[],
   rates: ExchangeRates,
   base: CurrencyCode,
+  language = "zh-CN",
 ): FinanceSummary {
   const remCny = calcRemainingCny(nodes, rates);
   const totCny = calcTotalValueCny(nodes, rates);
   const monCny = calcMonthlyCny(nodes, rates);
-  const rem = formatFinanceAmount(convertFromCny(remCny, base, rates), base);
-  const tot = formatFinanceAmount(convertFromCny(totCny, base, rates), base);
-  const mon = formatFinanceAmount(convertFromCny(monCny, base, rates), base);
+  const rem = formatFinanceAmount(convertFromCny(remCny, base, rates), base, language);
+  const tot = formatFinanceAmount(convertFromCny(totCny, base, rates), base, language);
+  const mon = formatFinanceAmount(convertFromCny(monCny, base, rates), base, language);
 
   const rateRows = DISPLAY_CURRENCIES.filter((c) => c !== base).map((c) => {
     const baseRate = rates[base] || 1;

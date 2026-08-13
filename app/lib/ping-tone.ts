@@ -1,7 +1,7 @@
 /** Distinct hues: blue / purple / amber / violet / orange / magenta */
 export const PING_TASK_COLORS = [
   "var(--cds-interactive)",
-  "#8a3ffc",
+  "var(--carbon-data-down)",
   "var(--cds-support-warning)",
   "#6929c4",
   "#ff832b",
@@ -15,13 +15,13 @@ export const PING_TASK_COLORS = [
 export const ISP_COLORS: Record<"CT" | "CU" | "CM", string> = {
   CT: "var(--cds-interactive)", // 电信 — blue
   CU: "var(--cds-support-error)", // 联通 — red
-  CM: "#8a3ffc", // 移动 — purple
+  CM: "var(--carbon-data-down)", // 移动 — purple
 };
 
 /** Upload / primary series */
 export const COLOR_UP = "var(--cds-interactive)";
 /** Download / secondary — purple, not near-blue support-info */
-export const COLOR_DOWN = "#8a3ffc";
+export const COLOR_DOWN = "var(--carbon-data-down)";
 
 export function latencyToneClass(ms: number): string {
   if (ms <= 60) return "ping-tone--good";

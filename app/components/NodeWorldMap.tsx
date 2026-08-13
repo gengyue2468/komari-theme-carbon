@@ -24,9 +24,14 @@ const DEFAULT_ZOOM = 1;
 interface NodeWorldMapProps {
   nodes: NodeInfo[];
   onlineIds: string[];
+  realtimeReady: boolean;
 }
 
-export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
+export function NodeWorldMap({
+  nodes,
+  onlineIds,
+  realtimeReady,
+}: NodeWorldMapProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const onlineSet = useMemo(() => new Set(onlineIds), [onlineIds]);
@@ -83,7 +88,9 @@ export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
       <div className="node-map__head">
         <span className="node-map__title">{t("map.title")}</span>
         <span className="node-map__meta mono">
-          {onlineCount}/{points.length} {t("app.online")}
+          {!realtimeReady
+            ? t("app.statusLoading")
+            : `${onlineCount}/${points.length} ${t("app.online")}`}
         </span>
       </div>
 
@@ -143,9 +150,11 @@ export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
                 <Marker key={m.key} coordinates={[m.lon, m.lat]}>
                   <g
                     className={
-                      clusterOnline
-                        ? "node-map__marker is-on"
-                        : "node-map__marker is-off"
+                      !realtimeReady
+                        ? "node-map__marker is-loading"
+                        : clusterOnline
+                          ? "node-map__marker is-on"
+                          : "node-map__marker is-off"
                     }
                     role="button"
                     tabIndex={0}
@@ -222,12 +231,14 @@ export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
                 {hover.count > 1 ? ` · ${hover.count}` : ""}
               </span>
               <span>
-                {hover.onlineCount}/{hover.count} {t("app.online")}
+                {!realtimeReady
+                  ? t("app.statusLoading")
+                  : `${hover.onlineCount}/${hover.count} ${t("app.online")}`}
               </span>
             </div>
             <div className="node-map__cards">
               {hover.members.map((mem) => {
-                const on = onlineSet.has(mem.uuid);
+                const on = realtimeReady && onlineSet.has(mem.uuid);
                 return (
                   <button
                     key={mem.uuid}
@@ -237,13 +248,17 @@ export function NodeWorldMap({ nodes, onlineIds }: NodeWorldMapProps) {
                     onClick={() => navigate(`/node/${mem.uuid}`)}
                   >
                     <span
-                      className={`node-map__card-dot${on ? " is-on" : ""}`}
+                      className={`node-map__card-dot${!realtimeReady ? " is-loading" : on ? " is-on" : ""}`}
                       aria-hidden
                     />
                     <span className="node-map__card-body">
                       <span className="node-map__card-name">{mem.name}</span>
-                      <span className="node-map__card-meta mono">
-                        {mem.city} · {on ? t("app.online") : t("app.offline")}
+                        <span className="node-map__card-meta mono">
+                          {mem.city} · {realtimeReady
+                            ? on
+                              ? t("app.online")
+                              : t("app.offline")
+                            : t("app.statusLoading")}
                       </span>
                     </span>
                   </button>

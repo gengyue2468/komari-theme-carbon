@@ -33,6 +33,7 @@ export function computeHomeStats(
   nodes: NodeInfo[],
   realtime: Record<string, RealtimeMetrics>,
   onlineIds: string[],
+  realtimeReady = true,
 ): HomeStatItem[] {
   const online = new Set(onlineIds);
   let ramUsed = 0;
@@ -42,6 +43,7 @@ export function computeHomeStats(
   let traffic = 0;
   let up = 0;
   let down = 0;
+  const hasRealtime = realtimeReady && Object.keys(realtime).length > 0;
 
   for (const n of nodes) {
     const m = realtime[n.uuid];
@@ -76,17 +78,17 @@ export function computeHomeStats(
     {
       id: "memory",
       labelKey: "stats.memory",
-      value: ram.value,
-      unit: ram.unit,
-      suffix: `/ ${ramT.value} ${ramT.unit}`,
+      value: hasRealtime ? ram.value : "—",
+      unit: hasRealtime ? ram.unit : undefined,
+      suffix: hasRealtime ? `/ ${ramT.value} ${ramT.unit}` : undefined,
       icon: "memory",
     },
     {
       id: "disk",
       labelKey: "stats.disk",
-      value: disk.value,
-      unit: disk.unit,
-      suffix: `/ ${diskT.value} ${diskT.unit}`,
+      value: hasRealtime ? disk.value : "—",
+      unit: hasRealtime ? disk.unit : undefined,
+      suffix: hasRealtime ? `/ ${diskT.value} ${diskT.unit}` : undefined,
       icon: "disk",
     },
     {
@@ -98,22 +100,22 @@ export function computeHomeStats(
     {
       id: "traffic",
       labelKey: "stats.traffic",
-      value: traf.value,
-      unit: traf.unit,
+      value: hasRealtime ? traf.value : "—",
+      unit: hasRealtime ? traf.unit : undefined,
       icon: "traffic",
     },
     {
       id: "uplink",
       labelKey: "stats.uplink",
-      value: upV ?? "0",
-      unit: `${upU ?? "B"}/s`,
+      value: hasRealtime ? upV ?? "0" : "—",
+      unit: hasRealtime ? `${upU ?? "B"}/s` : undefined,
       icon: "up",
     },
     {
       id: "downlink",
       labelKey: "stats.downlink",
-      value: downV ?? "0",
-      unit: `${downU ?? "B"}/s`,
+      value: hasRealtime ? downV ?? "0" : "—",
+      unit: hasRealtime ? `${downU ?? "B"}/s` : undefined,
       icon: "down",
     },
   ];

@@ -48,6 +48,8 @@ interface NodesState {
   nodes: NodeInfo[];
   onlineIds: string[];
   realtime: Record<string, RealtimeMetrics>;
+  realtimeUpdatedAt: Record<string, string>;
+  realtimeReady: boolean;
   loading: boolean;
   error: string | null;
   search: string;
@@ -58,6 +60,7 @@ interface NodesState {
   density: DensityMode;
   pollIntervalMs: number;
   unsubscribe: (() => void) | null;
+  bootstrapController: AbortController | null;
   bootstrap: () => Promise<void>;
   setSearch: (q: string) => void;
   setGroup: (g: string) => void;
@@ -70,6 +73,8 @@ export const useNodesStore = create<NodesState>((set, get) => ({
   nodes: [],
   onlineIds: [],
   realtime: {},
+  realtimeUpdatedAt: {},
+  realtimeReady: false,
   loading: true,
   error: null,
   search: "",
@@ -80,15 +85,35 @@ export const useNodesStore = create<NodesState>((set, get) => ({
   density: "comfortable",
   pollIntervalMs: 3000,
   unsubscribe: null,
+  bootstrapController: null,
 
   async bootstrap() {
-    set({ loading: true, error: null });
+    get().bootstrapController?.abort();
+    get().unsubscribe?.();
+    const controller = new AbortController();
+    set({
+      loading: true,
+      error: null,
+      bootstrapController: controller,
+      realtimeReady: false,
+      onlineIds: [],
+      realtime: {},
+      realtimeUpdatedAt: {},
+      unsubscribe: null,
+    });
     try {
       // Parallel: public settings + node list (one less RTT than sequential)
       const [publicSettings, nodes] = await Promise.all([
-        dataSource.getPublic(),
-        dataSource.getNodes(),
+        dataSource.getPublic(controller.signal),
+        dataSource.getNodes(controller.signal),
       ]);
+
+      if (
+        controller.signal.aborted ||
+        get().bootstrapController !== controller
+      ) {
+        return;
+      }
 
       const settings = (publicSettings.theme_settings ?? {}) as Record<
         string,
@@ -109,8 +134,6 @@ export const useNodesStore = create<NodesState>((set, get) => ({
       const chartHours = asNumber(settings.defaultChartHours, 4, 1, 168);
       const density = resolveDensity(settings);
 
-      get().unsubscribe?.();
-
       // Paint list ASAP; realtime fills in right after
       set({
         publicSettings,
@@ -125,6 +148,36 @@ export const useNodesStore = create<NodesState>((set, get) => ({
 
       let stopped = false;
       let nodeTimer: number | null = null;
+      let nodeRequestController: AbortController | null = null;
+
+      const refreshNodes = () => {
+        if (stopped || document.visibilityState === "hidden") return;
+        nodeRequestController?.abort();
+        const controller = new AbortController();
+        nodeRequestController = controller;
+        void dataSource
+          .getNodes(controller.signal)
+          .then((list) => {
+            if (stopped || controller.signal.aborted) return;
+            const prev = get().nodes;
+            if (nodesFingerprint(prev) === nodesFingerprint(list)) return;
+            set({ nodes: list });
+          })
+          .catch(() => {
+            // Keep the last known node inventory during transient failures.
+          })
+          .finally(() => {
+            if (nodeRequestController === controller) {
+              nodeRequestController = null;
+            }
+          });
+      };
+
+      const onVisibilityChange = () => {
+        if (document.visibilityState === "visible") refreshNodes();
+      };
+      document.addEventListener("visibilitychange", onVisibilityChange);
+
       const baseUnsub = dataSource.subscribeRealtime(
         (snap) => {
           if (stopped) return;
@@ -132,54 +185,74 @@ export const useNodesStore = create<NodesState>((set, get) => ({
           // by reference in the mapper) so quiet ticks don't re-render the
           // whole list every poll interval.
           const prevData = get().realtime;
+          const prevUpdatedAt = get().realtimeUpdatedAt;
           const prevOnline = get().onlineIds;
-          let changed = snap.online.length !== prevOnline.length;
-          if (!changed) {
+          let metricsChanged = snap.online.length !== prevOnline.length;
+          if (!metricsChanged) {
             for (let i = 0; i < prevOnline.length; i++) {
               if (snap.online[i] !== prevOnline[i]) {
-                changed = true;
+                metricsChanged = true;
                 break;
               }
             }
           }
-          if (!changed) {
+          if (!metricsChanged) {
             for (const key of Object.keys(snap.data)) {
               if (snap.data[key] !== prevData[key]) {
-                changed = true;
+                metricsChanged = true;
                 break;
               }
             }
           }
-          if (!changed) {
+          if (!metricsChanged) {
             for (const key of Object.keys(prevData)) {
               if (!(key in snap.data)) {
-                changed = true;
+                metricsChanged = true;
                 break;
               }
             }
           }
-          if (changed) set({ onlineIds: snap.online, realtime: snap.data });
+          let timestampChanged = false;
+          if (!timestampChanged) {
+            for (const key of Object.keys(snap.updatedAt)) {
+              if (snap.updatedAt[key] !== prevUpdatedAt[key]) {
+                timestampChanged = true;
+                break;
+              }
+            }
+          }
+          if (metricsChanged || timestampChanged || !get().realtimeReady) {
+            set({
+              ...(metricsChanged
+                ? { onlineIds: snap.online, realtime: snap.data }
+                : {}),
+              ...(metricsChanged || timestampChanged
+                ? { realtimeUpdatedAt: snap.updatedAt }
+                : {}),
+              realtimeReady: true,
+            });
+          }
         },
         { intervalMs: pollIntervalMs },
       );
 
       nodeTimer = window.setInterval(() => {
-        void dataSource.getNodes().then((list) => {
-          if (stopped) return;
-          const prev = get().nodes;
-          if (nodesFingerprint(prev) === nodesFingerprint(list)) return;
-          set({ nodes: list });
-        });
+        refreshNodes();
       }, Math.max(pollIntervalMs * 20, 60_000));
 
       set({
         unsubscribe: () => {
           stopped = true;
           if (nodeTimer != null) window.clearInterval(nodeTimer);
+          nodeRequestController?.abort();
+          document.removeEventListener("visibilitychange", onVisibilityChange);
           baseUnsub();
         },
       });
     } catch (e) {
+      if (controller.signal.aborted || get().bootstrapController !== controller) {
+        return;
+      }
       set({
         loading: false,
         error: e instanceof Error ? e.message : "Failed to load data",
@@ -201,7 +274,8 @@ export const useNodesStore = create<NodesState>((set, get) => ({
   },
 
   teardown() {
+    get().bootstrapController?.abort();
     get().unsubscribe?.();
-    set({ unsubscribe: null });
+    set({ unsubscribe: null, bootstrapController: null });
   },
 }));

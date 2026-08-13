@@ -28,8 +28,11 @@ function apiRoot(): string {
   return base.replace(/\/$/, "") || "/api";
 }
 
-async function restPublic(): Promise<PublicSettings> {
-  const res = await fetch(`${apiRoot()}/public`, { credentials: "include" });
+async function restPublic(signal?: AbortSignal): Promise<PublicSettings> {
+  const res = await fetch(`${apiRoot()}/public`, {
+    credentials: "include",
+    signal,
+  });
   if (!res.ok) throw new Error(`public ${res.status}`);
   const json = (await res.json()) as { status?: string; data: PublicSettings };
   if (json.status && json.status !== "success") {
@@ -86,7 +89,7 @@ async function restPingRecords(
     `${apiRoot()}/records/ping?uuid=${encodeURIComponent(uuid)}&hours=${hours}`,
     { credentials: "include", signal },
   );
-  if (!res.ok) return { count: 0, records: [], tasks: [] };
+  if (!res.ok) throw new Error(`ping records ${res.status}`);
   const json = (await res.json()) as {
     data: {
       count?: number;
@@ -104,13 +107,13 @@ async function restPingRecords(
 
 function createRpcDataSource(): KomariDataSource {
   return {
-    async getPublic() {
-      return restPublic();
+    async getPublic(signal) {
+      return restPublic(signal);
     },
 
-    async getNodes() {
+    async getNodes(signal) {
       try {
-        const map = await rpcGetNodes();
+        const map = await rpcGetNodes(signal);
         return mapClientsToNodes(map);
       } catch (e) {
         if (e instanceof RpcError && e.code === 401) {
@@ -121,27 +124,28 @@ function createRpcDataSource(): KomariDataSource {
     },
 
     async getRecent(uuid) {
-      try {
-        const res = await rpcGetNodeRecentStatus(uuid);
-        return (res.records ?? []).map((r) =>
-          mapStatusToMetrics({
-            ...r,
-            online: true,
-            uptime: 0,
-            load5: r.load5,
-            load15: r.load15,
-          }),
-        );
-      } catch {
-        return [];
-      }
+      const res = await rpcGetNodeRecentStatus(uuid);
+      return (res.records ?? []).map((r) =>
+        mapStatusToMetrics({
+          ...r,
+          online: true,
+          uptime: 0,
+          load5: r.load5,
+          load15: r.load15,
+        }),
+      );
     },
 
     async getLoadRecords(uuid, hours, signal) {
       try {
         const res = await rpcGetLoadRecords(uuid, hours, signal);
         const records = (res.records ?? []).map(mapStatusRecordToLoad);
-        return { count: res.count ?? records.length, records };
+        return {
+          count: res.count ?? records.length,
+          records,
+          has_gpu_data:
+            res.has_gpu_data ?? records.some((record) => record.gpu !== 0),
+        };
       } catch (e) {
         if (signal?.aborted) throw e;
         return restLoadRecords(uuid, hours, signal);
@@ -178,7 +182,7 @@ function createRpcDataSource(): KomariDataSource {
           return await restPingRecords(uuid, hours, signal);
         } catch (err) {
           if (signal?.aborted) throw err;
-          return { count: 0, records: [], tasks: [] };
+          throw err;
         }
       }
     },
@@ -197,6 +201,12 @@ function createRpcDataSource(): KomariDataSource {
       );
       let failCount = 0;
 
+      const clearTimer = () => {
+        if (timer == null) return;
+        window.clearTimeout(timer);
+        timer = null;
+      };
+
       // Only override transport when env is explicit; else keep bootstrap choice
       const envWs = import.meta.env.VITE_RPC_WS as string | undefined;
       if (envWs === "true") rpc.setTransport(true);
@@ -204,7 +214,7 @@ function createRpcDataSource(): KomariDataSource {
 
       let inFlight = false;
       const tick = async () => {
-        if (stopped || inFlight) return;
+        if (stopped || inFlight || document.visibilityState === "hidden") return;
         inFlight = true;
         try {
           const statuses = await rpcGetNodesLatestStatus();
@@ -223,23 +233,41 @@ function createRpcDataSource(): KomariDataSource {
         }
       };
 
+      const schedule = () => {
+        if (stopped || document.visibilityState === "hidden") return;
+        const delay = Math.min(
+          60_000,
+          intervalMs * 2 ** Math.min(Math.max(failCount - 1, 0), 4),
+        );
+        clearTimer();
+        timer = window.setTimeout(() => {
+          timer = null;
+          void tick().finally(schedule);
+        }, delay);
+      };
+
+      const onVisibilityChange = () => {
+        if (document.visibilityState === "hidden") {
+          clearTimer();
+          rpc.closeWs();
+          return;
+        }
+        failCount = 0;
+        void tick().finally(schedule);
+      };
+      document.addEventListener("visibilitychange", onVisibilityChange);
+
       void (async () => {
         // Skip extra rpc.ping RTT — first status call is enough health check
         await tick();
         if (stopped) return;
-        const loop = () => {
-          timer = window.setTimeout(() => {
-            void tick().finally(() => {
-              if (!stopped) loop();
-            });
-          }, intervalMs);
-        };
-        loop();
+        schedule();
       })();
 
       return () => {
         stopped = true;
-        if (timer != null) window.clearTimeout(timer);
+        clearTimer();
+        document.removeEventListener("visibilitychange", onVisibilityChange);
         rpc.closeWs();
       };
     },

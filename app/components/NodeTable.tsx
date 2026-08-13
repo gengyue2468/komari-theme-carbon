@@ -26,16 +26,20 @@ import {
   trafficUsedBytes,
 } from "~/lib/format";
 import { getArchIcon, getOsIcon } from "~/lib/os-arch";
-import { pickDisplayNetworks } from "~/lib/ping-display";
+import { selectPingNetworks } from "~/lib/ping-display";
 import type { NodeInfo, RealtimeMetrics } from "~/types/komari";
 
 interface NodeTableProps {
   nodes: NodeInfo[];
   onlineIds: string[];
+  realtimeReady: boolean;
   realtime: Record<string, RealtimeMetrics>;
 }
 
-function MiniBar({ pct }: { pct: number }) {
+function MiniBar({ pct }: { pct: number | null }) {
+  if (pct == null) {
+    return <div className="card-bar card-bar--sm card-bar--empty" aria-hidden />;
+  }
   const v = Math.min(100, Math.max(0, pct));
   const tone =
     v >= 90 ? " card-bar__fill--error" : v >= 75 ? " card-bar__fill--warn" : "";
@@ -46,10 +50,12 @@ function MiniBar({ pct }: { pct: number }) {
   );
 }
 
-function MetricCell({ pct, sub }: { pct: number; sub?: string }) {
+function MetricCell({ pct, sub }: { pct: number | null; sub?: string }) {
   return (
     <div className="table-metric">
-      <span className="table-metric__pct mono">{pct.toFixed(0)}%</span>
+      <span className="table-metric__pct mono">
+        {pct == null ? "—" : `${pct.toFixed(0)}%`}
+      </span>
       <MiniBar pct={pct} />
       {sub ? <span className="table-metric__sub mono">{sub}</span> : null}
     </div>
@@ -60,7 +66,12 @@ function sortPad(n: number): string {
   return n.toFixed(2).padStart(8, "0");
 }
 
-export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
+export function NodeTable({
+  nodes,
+  onlineIds,
+  realtimeReady,
+  realtime,
+}: NodeTableProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const onlineSet = useMemo(() => new Set(onlineIds), [onlineIds]);
@@ -77,7 +88,7 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
       { key: "disk", header: t("table.disk") },
       { key: "traffic", header: t("table.traffic") },
       { key: "rate", header: t("table.rate") },
-      { key: "isp", header: t("table.isp") },
+      { key: "monitoringPoints", header: t("table.monitoringPoints") },
     ],
     [t],
   );
@@ -85,11 +96,13 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
   const rows = useMemo(
     () =>
       nodes.map((n) => {
-        const on = onlineSet.has(n.uuid);
-        const m = realtime[n.uuid];
-        const cpu = m?.cpu.usage ?? 0;
-        const ramPct = m ? percentOf(m.ram.used, m.ram.total) : 0;
-        const diskPct = m ? percentOf(m.disk.used, m.disk.total) : 0;
+        const on = realtimeReady && onlineSet.has(n.uuid);
+        const m = realtimeReady ? realtime[n.uuid] : undefined;
+        const cpu = m?.cpu.usage ?? null;
+        const ramTotal = n.mem_total || m?.ram.total || 0;
+        const diskTotal = n.disk_total || m?.disk.total || 0;
+        const ramPct = m && ramTotal > 0 ? percentOf(m.ram.used, ramTotal) : null;
+        const diskPct = m && diskTotal > 0 ? percentOf(m.disk.used, diskTotal) : null;
         const tUsed = m
           ? trafficUsedBytes(
               m.network.totalUp,
@@ -97,7 +110,8 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
               n.traffic_limit_type,
             )
           : 0;
-        const tPct = n.traffic_limit > 0 ? percentOf(tUsed, n.traffic_limit) : 0;
+        const tPct =
+          m && n.traffic_limit > 0 ? percentOf(tUsed, n.traffic_limit) : null;
         const tags = parseTags(n.tags);
         const cycle = formatBillingCycle(n.billing_cycle);
         const price =
@@ -114,12 +128,12 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
           arch: n.arch || "",
           name: n.name || "",
           tags: [n.group, ...tags].filter(Boolean).join(" "),
-          cpu: sortPad(cpu),
-          mem: sortPad(ramPct),
-          disk: sortPad(diskPct),
-          traffic: sortPad(tPct),
-          rate: sortPad((m?.network.up ?? 0) + (m?.network.down ?? 0)),
-          isp: "",
+          cpu: sortPad(cpu ?? -1),
+          mem: sortPad(ramPct ?? -1),
+          disk: sortPad(diskPct ?? -1),
+          traffic: sortPad(tPct ?? -1),
+          rate: sortPad(m ? m.network.up + m.network.down : -1),
+          monitoringPoints: "",
           _on: on,
           _m: m,
           _n: n,
@@ -134,18 +148,21 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
           _tLimit: n.traffic_limit,
           _netUp: m ? formatRate(m.network.up) : "—",
           _netDown: m ? formatRate(m.network.down) : "—",
-          _uptime: formatUptime(m?.uptime ?? 0),
+          _uptime: m ? formatUptime(m.uptime) : "—",
           _price: price,
-          _nets: pickDisplayNetworks(m?.ping),
+          _nets: selectPingNetworks(m?.ping),
         };
       }),
-    [nodes, onlineSet, realtime, t],
+    [nodes, onlineSet, realtime, realtimeReady, t],
   );
 
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
 
   return (
     <div className="node-table-wrap">
+      <p className="node-table__scroll-hint">
+        {t("table.scrollHint")}
+      </p>
       <DataTable rows={rows} headers={headers} isSortable size="lg">
         {({
           rows: dtRows,
@@ -161,7 +178,7 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                 <TableRow>
                   {dtHeaders.map((header) => {
                     const sortable =
-                      header.key !== "tags" && header.key !== "isp";
+                      header.key !== "tags" && header.key !== "monitoringPoints";
                     const { key, ...rest } = getHeaderProps({
                       header,
                       isSortable: sortable,
@@ -184,9 +201,11 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                       key={key}
                       {...rowRest}
                       className={
-                        d._on
-                          ? "table-row-clickable"
-                          : "table-row-clickable is-offline"
+                        !realtimeReady
+                          ? "table-row-clickable is-loading"
+                          : d._on
+                            ? "table-row-clickable"
+                            : "table-row-clickable is-offline"
                       }
                       tabIndex={0}
                       role="link"
@@ -200,12 +219,19 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                       }}
                     >
                       <TableCell>
-                        <span
-                          className={`table-dot${d._on ? " is-on" : ""}`}
-                          aria-label={
-                            d._on ? t("app.online") : t("app.offline")
-                          }
-                        />
+                        <span className="table-status">
+                          <span
+                            className={`table-dot${!realtimeReady ? " is-loading" : d._on ? " is-on" : ""}`}
+                            aria-hidden
+                          />
+                          <span className="table-status__label">
+                            {!realtimeReady
+                              ? t("app.statusLoading")
+                              : d._on
+                                ? t("app.online")
+                                : t("app.offline")}
+                          </span>
+                        </span>
                       </TableCell>
 
                       <TableCell>
@@ -225,7 +251,7 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                       </TableCell>
 
                       <TableCell>
-                        <div className={d._on ? "table-name" : "table-name is-dim"}>
+                        <div className="table-name">
                           <div className="table-name__top">
                             <RegionFlag
                               region={d._n.region}
@@ -234,7 +260,11 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                             <span className="table-name__text">{d.name}</span>
                           </div>
                           <span className="table-name__sub mono">
-                            {d._on ? d._uptime : t("app.offline")}
+                            {!realtimeReady
+                              ? t("app.statusLoading")
+                              : d._on
+                                ? d._uptime
+                                : t("app.offline")}
                             {d._price ? ` · ${d._price}` : ""}
                           </span>
                         </div>
@@ -271,7 +301,7 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                           pct={d._ramPct}
                           sub={
                             d._m
-                              ? `${formatBytes(d._m.ram.used)} / ${formatBytes(d._n.mem_total)}`
+                               ? `${formatBytes(d._m.ram.used)} / ${formatBytes(d._n.mem_total || d._m.ram.total)}`
                               : undefined
                           }
                         />
@@ -282,7 +312,7 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                           pct={d._diskPct}
                           sub={
                             d._m
-                              ? `${formatBytes(d._m.disk.used)} / ${formatBytes(d._n.disk_total)}`
+                               ? `${formatBytes(d._m.disk.used)} / ${formatBytes(d._n.disk_total || d._m.disk.total)}`
                               : undefined
                           }
                         />
@@ -292,9 +322,11 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                         <MetricCell
                           pct={d._tPct}
                           sub={
-                            d._tLimit > 0
-                              ? `${formatBytes(d._tUsed)} / ${formatBytes(d._tLimit)} · ${trafficLimitTypeLabel(d._n.traffic_limit_type)}`
-                              : "∞"
+                            !d._m
+                              ? "—"
+                              : d._tLimit > 0
+                                ? `${formatBytes(d._tUsed)} / ${formatBytes(d._tLimit)} · ${trafficLimitTypeLabel(d._n.traffic_limit_type)}`
+                                : "∞"
                           }
                         />
                       </TableCell>
@@ -313,33 +345,60 @@ export function NodeTable({ nodes, onlineIds, realtime }: NodeTableProps) {
                       </TableCell>
 
                       <TableCell>
-                        <div className="table-isp-cell">
-                          {d._nets.map((net) => {
-                            const label =
-                              net.label === "CT"
-                                ? t("metrics.ct")
-                                : net.label === "CU"
-                                  ? t("metrics.cu")
-                                  : net.label === "CM"
-                                    ? t("metrics.cm")
-                                    : net.label;
-                            return (
+                        {!realtimeReady ? (
+                          <span className="table-ping-cell__empty mono">
+                            {t("app.statusLoading")}
+                          </span>
+                        ) : d._nets.visible.length === 0 ? (
+                          <span className="table-ping-cell__empty mono">—</span>
+                        ) : (
+                          <div className="table-ping-cell">
+                            <div className="table-ping-cell__head">
+                              <span />
+                              <span>{t("metrics.latency")}</span>
+                              <span>{t("metrics.loss")}</span>
+                            </div>
+                            {d._nets.visible.map((point) => (
                               <span
-                                key={`${net.label}-${net.name}`}
-                                className="table-isp-cell__line mono"
+                                key={point.id}
+                                className="table-ping-cell__line"
                               >
-                                <span className="table-isp-cell__name">
-                                  {label}
+                                <span
+                                  className="table-ping-cell__name"
+                                  title={point.name}
+                                >
+                                  {point.name || point.id}
                                 </span>
-                                <span className="table-isp-cell__val">
-                                  {net.latencyMs != null
-                                    ? `${net.latencyMs}ms`
+                                <span className="table-ping-cell__metric mono">
+                                  {point.latencyMs != null
+                                    ? `${point.latencyMs}ms`
+                                    : "—"}
+                                </span>
+                                <span className="table-ping-cell__metric mono">
+                                  {point.lossPct != null
+                                    ? `${point.lossPct.toFixed(1)}%`
                                     : "—"}
                                 </span>
                               </span>
-                            );
-                          })}
-                        </div>
+                            ))}
+                            {d._nets.extraCount > 0 ? (
+                              <button
+                                type="button"
+                                className="table-ping-cell__more"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  navigate(`/node/${d.id}#ping-chart`);
+                                }}
+                                onKeyDown={(event) => event.stopPropagation()}
+                                aria-label={t("detail.morePingPoints", {
+                                  count: d._nets.extraCount,
+                                })}
+                              >
+                                ... +{d._nets.extraCount}
+                              </button>
+                            ) : null}
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

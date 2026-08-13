@@ -101,6 +101,7 @@ export interface RealtimeMetrics {
 export interface RealtimeSnapshot {
   online: string[];
   data: Record<string, RealtimeMetrics>;
+  updatedAt: Record<string, string>;
 }
 
 export interface LoadRecord {
@@ -166,8 +167,8 @@ export interface MeInfo {
 }
 
 export interface KomariDataSource {
-  getPublic(): Promise<PublicSettings>;
-  getNodes(): Promise<NodeInfo[]>;
+  getPublic(signal?: AbortSignal): Promise<PublicSettings>;
+  getNodes(signal?: AbortSignal): Promise<NodeInfo[]>;
   getRecent(uuid: string): Promise<RealtimeMetrics[]>;
   getLoadRecords(
     uuid: string,

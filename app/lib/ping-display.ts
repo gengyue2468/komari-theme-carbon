@@ -4,15 +4,10 @@ import i18n from "~/i18n";
 import { ISP_COLORS, PING_TASK_COLORS } from "~/lib/ping-tone";
 
 export interface PingNetworkDisplay {
+  id: string;
   name: string;
   latencyMs: number | null;
   lossPct?: number;
-}
-
-export interface PingSparkPoint {
-  time: string;
-  latency: number | null;
-  loss: number | null;
 }
 
 /** Build 三网-style list from live status.ping map */
@@ -20,7 +15,8 @@ export function networksFromLivePing(
   ping?: Record<string, NodePingLive>,
 ): PingNetworkDisplay[] {
   if (!ping) return [];
-  return Object.values(ping).map((p) => ({
+  return Object.entries(ping).map(([id, p]) => ({
+    id,
     name: p.name,
     latencyMs: p.latest >= 0 ? Math.round(p.latest) : null,
     lossPct: p.loss,
@@ -59,108 +55,66 @@ export function categorizeIsp(name: string): IspCategory | null {
   return null;
 }
 
-/**
- * Pick the best (lowest latency) task for each ISP category.
- * Returns exactly 3 entries: CT, CU, CM (in that order).
- * Missing categories get latencyMs = null.
- */
-export function pickThreeNetworks(
+export interface PingNetworkSelection {
+  visible: PingNetworkDisplay[];
+  extraCount: number;
+}
+
+/** Keep the backend monitoring-point order and cap compact views at three. */
+export function selectPingNetworks(
   ping?: Record<string, NodePingLive>,
-): { category: IspCategory; latencyMs: number | null; name: string }[] {
-  if (!ping) return [];
-  const best: Record<string, { latencyMs: number; name: string } | null> = {
-    CT: null,
-    CU: null,
-    CM: null,
+  limit = 3,
+): PingNetworkSelection {
+  const all = networksFromLivePing(ping);
+  const visible = all.slice(0, Math.max(0, limit));
+  return {
+    visible,
+    extraCount: Math.max(0, all.length - visible.length),
   };
-  for (const p of Object.values(ping)) {
-    const cat = categorizeIsp(p.name);
-    if (!cat) continue;
-    const lat = p.latest >= 0 ? Math.round(p.latest) : null;
-    if (lat == null) continue;
-    if (!best[cat] || lat < best[cat]!.latencyMs) {
-      best[cat] = { latencyMs: lat, name: p.name };
-    }
-  }
-  return (["CT", "CU", "CM"] as IspCategory[]).map((category) => ({
-    category,
-    latencyMs: best[category]?.latencyMs ?? null,
-    name: best[category]?.name ?? "",
-  }));
 }
 
-/** True when at least one live ping task name matches CT/CU/CM keywords. */
-export function hasIspPingTasks(ping?: Record<string, NodePingLive>): boolean {
-  if (!ping) return false;
-  return Object.values(ping).some((p) => categorizeIsp(p.name) != null);
+export interface PingSparkPoint {
+  time: string;
+  latency: number | null;
+  loss: number | null;
 }
 
-/**
- * Card / table ISP strip: use 三网 when Chinese ISP tasks exist; otherwise list
- * all live ping tasks (international nodes).
- */
-export function pickDisplayNetworks(
-  ping?: Record<string, NodePingLive>,
-): { label: string; latencyMs: number | null; name: string }[] {
-  if (!ping) return [];
-  if (hasIspPingTasks(ping)) {
-    return pickThreeNetworks(ping).map((n) => ({
-      label: n.category,
-      latencyMs: n.latencyMs,
-      name: n.name,
-    }));
-  }
-  return Object.values(ping).map((p) => ({
-    label: p.name,
-    latencyMs: p.latest >= 0 ? Math.round(p.latest) : null,
-    name: p.name,
-  }));
-}
-
-/**
- * Card spark: one bar per live ping task (real latency/loss snapshot). No
- * synthetic data — realtime status only carries current values, so we show
- * exactly those rather than fabricating history.
- */
 export function sparkFromLivePing(
   ping?: Record<string, NodePingLive>,
 ): PingSparkPoint[] {
-  const nets = networksFromLivePing(ping);
-  return nets.map((n, i) => ({
-    time: `${n.name || i}-${i}`,
-    latency: n.latencyMs,
-    loss: n.lossPct ?? null,
+  return networksFromLivePing(ping).map((point) => ({
+    time: point.id,
+    latency: point.latencyMs,
+    loss: point.lossPct ?? null,
   }));
 }
 
+/** Aggregate all live monitoring points for the compact card summary. */
 export function cardPingFromMetrics(metrics?: RealtimeMetrics): {
-  networks: PingNetworkDisplay[];
   bars: PingSparkPoint[];
-  avgLatencyMs: number;
-  avgLossPct: number;
+  avgLatencyMs: number | null;
+  avgLossPct: number | null;
 } {
   const networks = networksFromLivePing(metrics?.ping);
-  const valid = networks
-    .map((n) => n.latencyMs)
-    .filter((v): v is number => v != null);
-  const avgLatencyMs =
-    valid.length > 0
-      ? Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)
-      : 0;
+  const latencies = networks
+    .map((point) => point.latencyMs)
+    .filter((value): value is number => value != null);
   const losses = networks
-    .map((n) => n.lossPct)
-    .filter((v): v is number => v != null);
-  const avgLossPct =
-    losses.length > 0
-      ? Number(
-          (losses.reduce((a, b) => a + b, 0) / losses.length).toFixed(1),
-        )
-      : 0;
+    .map((point) => point.lossPct)
+    .filter((value): value is number => value != null);
+
   return {
-    networks,
     bars: sparkFromLivePing(metrics?.ping),
-    avgLatencyMs,
-    avgLossPct,
+    avgLatencyMs:
+      latencies.length > 0
+        ? Math.round(latencies.reduce((sum, value) => sum + value, 0) / latencies.length)
+        : null,
+    avgLossPct:
+      losses.length > 0
+        ? Number(
+            (losses.reduce((sum, value) => sum + value, 0) / losses.length).toFixed(1),
+          )
+        : null,
   };
 }
 

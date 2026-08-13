@@ -1,4 +1,4 @@
-import { Button, Tab, TabList, Tabs, Tile } from "@carbon/react";
+import { Button, Modal, Tab, TabList, Tabs, Tile } from "@carbon/react";
 import { LineChart } from "@carbon/charts-react";
 import {
   Alignments,
@@ -24,6 +24,7 @@ type RangeKey = "1h" | "6h" | "12h" | "1d";
 interface PingChartProps {
   uuid: string;
   online: boolean;
+  realtimeReady: boolean;
 }
 
 interface ChartPoint {
@@ -39,7 +40,7 @@ const RANGES: Array<{ key: RangeKey; hours: number }> = [
   { key: "1d", hours: 24 },
 ];
 
-export function PingChart({ uuid, online }: PingChartProps) {
+export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
   const { t, i18n } = useTranslation();
   const carbonTheme = useAppearanceStore((s) => s.carbonTheme);
   const theme = carbonTheme === "g100" ? "g100" : "g10";
@@ -74,6 +75,7 @@ export function PingChart({ uuid, online }: PingChartProps) {
   const [range, setRange] = useState<RangeKey>(initialRange);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectionReady, setSelectionReady] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const hours =
     availableRanges.find((r) => r.key === range)?.hours ??
@@ -122,6 +124,19 @@ export function PingChart({ uuid, online }: PingChartProps) {
   useEffect(() => {
     setSelectionReady(false);
   }, [uuid]);
+
+  useEffect(() => {
+    if (window.location.hash !== "#ping-chart") return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("ping-chart")?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "start",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const chartData = useMemo<ChartPoint[]>(() => {
     const out: ChartPoint[] = [];
@@ -214,101 +229,127 @@ export function PingChart({ uuid, online }: PingChartProps) {
     );
   };
 
-  return (
-    <div className="ping-chart-panel">
-      {!online ? (
-        <p className="ping-chart-panel__offline mono">{t("detail.offlineHint")}</p>
-      ) : null}
-      <div className="ping-chart-panel__toolbar">
-        <div className="ping-chart-panel__tabs">
-          <Tabs
-            selectedIndex={rangeIndex}
-            onChange={({ selectedIndex: index }) => {
-              setRange(availableRanges[index]?.key ?? "1h");
-            }}
+  const renderToolbar = () => (
+    <div className="ping-chart-panel__toolbar">
+      <div className="ping-chart-panel__tabs">
+        <Tabs
+          selectedIndex={rangeIndex}
+          onChange={({ selectedIndex: index }) => {
+            setRange(availableRanges[index]?.key ?? "1h");
+          }}
+        >
+          <TabList
+            aria-label={t("detail.pingChart")}
+            contained
+            className="chart-range-tabs"
           >
-            <TabList
-              aria-label={t("detail.pingChart")}
-              contained
-              className="chart-range-tabs"
-            >
-              {availableRanges.map((r) => (
-                <Tab key={r.key}>{rangeLabels[r.key]}</Tab>
-              ))}
-            </TabList>
-          </Tabs>
-        </div>
-        <div className="ping-chart-panel__select">
-          <Button
-            kind="ghost"
-            size="sm"
-            onClick={() => setSelectedIds(tasks.map((x) => x.id))}
-            disabled={selectedIds.length === tasks.length}
-          >
-            {t("detail.selectAll")}
-          </Button>
-          <Button
-            kind="ghost"
-            size="sm"
-            onClick={() => setSelectedIds([])}
-            disabled={selectedIds.length === 0}
-          >
-            {t("detail.selectNone")}
-          </Button>
-        </div>
+            {availableRanges.map((r) => (
+              <Tab key={r.key}>{rangeLabels[r.key]}</Tab>
+            ))}
+          </TabList>
+        </Tabs>
       </div>
+      <div className="ping-chart-panel__select">
+        <Button
+          kind="ghost"
+          size="sm"
+          onClick={() => setSelectedIds(tasks.map((x) => x.id))}
+          disabled={selectedIds.length === tasks.length}
+        >
+          {t("detail.selectAll")}
+        </Button>
+        <Button
+          kind="ghost"
+          size="sm"
+          onClick={() => setSelectedIds([])}
+          disabled={selectedIds.length === 0}
+        >
+          {t("detail.selectNone")}
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderTaskGrid = () => (
+    <div className="ping-task-grid">
+      {tasks.map((task) => (
+        <button
+          key={task.id}
+          type="button"
+          className={`ping-task-card${
+            selectedIds.includes(task.id) ? " is-active" : " is-dim"
+          }`}
+          onClick={() => toggleTask(task.id)}
+          aria-pressed={selectedIds.includes(task.id)}
+        >
+          <span
+            className="ping-task-card__bar"
+            style={{ background: task.color }}
+            aria-hidden
+          />
+          <div className="ping-task-card__body">
+            <div className="ping-task-card__top">
+              <span className="ping-task-card__name">{task.name}</span>
+              <span className="ping-task-card__latest mono">
+                {task.latest != null ? `${task.latest} ms` : "—"}
+              </span>
+            </div>
+            <div className="ping-task-card__stats mono">
+              <span>
+                {t("detail.avg")} {task.avg != null ? `${task.avg} ms` : "—"}
+              </span>
+              <span>
+                {t("metrics.loss")} {task.lossPct.toFixed(1)}%
+              </span>
+              {task.type || task.interval ? (
+                <span className="ping-task-card__meta">
+                  {[task.type, task.interval ? `${task.interval}s` : ""]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div id="ping-chart" className="ping-chart-panel">
+      {!realtimeReady ? (
+        <p className="ping-chart-panel__offline mono">{t("app.statusLoading")}</p>
+      ) : null}
+      {renderToolbar()}
 
       {loading ? (
         <PageSpinner />
+      ) : pingQuery.isError && !pingQuery.data ? (
+        <p className="empty" role="alert">{t("detail.pingDataError")}</p>
       ) : tasks.length === 0 ? (
         <p className="empty">{t("detail.noPingData")}</p>
       ) : (
         <>
-          <div className="ping-task-grid">
-            {tasks.map((task) => (
-              <button
-                key={task.id}
-                type="button"
-                className={`ping-task-card${
-                  selectedIds.includes(task.id) ? " is-active" : " is-dim"
-                }`}
-                onClick={() => toggleTask(task.id)}
-                aria-pressed={selectedIds.includes(task.id)}
-              >
-                <span
-                  className="ping-task-card__bar"
-                  style={{ background: task.color }}
-                  aria-hidden
-                />
-                <div className="ping-task-card__body">
-                  <div className="ping-task-card__top">
-                    <span className="ping-task-card__name">{task.name}</span>
-                    <span className="ping-task-card__latest mono">
-                      {task.latest != null ? `${task.latest} ms` : "—"}
-                    </span>
-                  </div>
-                  <div className="ping-task-card__stats mono">
-                    <span>
-                      {t("detail.avg")}{" "}
-                      {task.avg != null ? `${task.avg} ms` : "—"}
-                    </span>
-                    <span>
-                      {t("metrics.loss")} {task.lossPct.toFixed(1)}%
-                    </span>
-                    {task.type || task.interval ? (
-                      <span className="ping-task-card__meta">
-                        {[task.type, task.interval ? `${task.interval}s` : ""]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
+          {renderTaskGrid()}
 
-          <Tile className="ping-chart-main">
+          <Tile
+            className={`ping-chart-main${chartData.length > 0 ? " is-interactive" : ""}`}
+            role={chartData.length > 0 ? "button" : undefined}
+            tabIndex={chartData.length > 0 ? 0 : undefined}
+            aria-label={
+              chartData.length > 0 ? t("detail.openPingChart") : undefined
+            }
+            onClick={() => {
+              if (chartData.length > 0) setDialogOpen(true);
+            }}
+            onKeyDown={(event) => {
+              if (chartData.length === 0) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setDialogOpen(true);
+              }
+            }}
+          >
             {chartData.length === 0 ? (
               <div className="ping-chart-main__empty">
                 {t("detail.noPingData")}
@@ -319,6 +360,32 @@ export function PingChart({ uuid, online }: PingChartProps) {
           </Tile>
         </>
       )}
+
+      {dialogOpen ? (
+        <Modal
+          open
+          passiveModal
+          size="lg"
+          modalHeading={t("detail.pingChart")}
+          onRequestClose={() => setDialogOpen(false)}
+          className="ping-chart-dialog"
+        >
+          <div className="ping-chart-dialog__controls">{renderToolbar()}</div>
+          <div className="ping-chart-dialog__tasks">{renderTaskGrid()}</div>
+          <div className="ping-chart-dialog__chart">
+            {loading ? (
+              <PageSpinner />
+            ) : chartData.length === 0 ? (
+              <div className="ping-chart-main__empty">{t("detail.noPingData")}</div>
+            ) : (
+              <LineChart
+                data={chartData}
+                options={{ ...options, height: "460px" }}
+              />
+            )}
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }

@@ -376,10 +376,12 @@ export async function rpcPing(): Promise<string> {
   return getRpc().call<string>("rpc.ping");
 }
 
-export async function rpcGetNodes(): Promise<Record<string, RpcClientInfo>> {
+export async function rpcGetNodes(
+  signal?: AbortSignal,
+): Promise<Record<string, RpcClientInfo>> {
   const result = await getRpc().call<
     Record<string, RpcClientInfo> | RpcClientInfo
-  >("common:getNodes", {});
+  >("common:getNodes", {}, 15000, signal);
   if (result && typeof result === "object" && "uuid" in result) {
     const c = result as RpcClientInfo;
     return { [c.uuid]: c };
@@ -428,9 +430,14 @@ export async function rpcGetLoadRecords(
   uuid: string,
   hours: number,
   signal?: AbortSignal,
-): Promise<{ count: number; records: RpcStatusRecord[] }> {
+): Promise<{
+  count: number;
+  records: RpcStatusRecord[];
+  has_gpu_data?: boolean;
+}> {
   const res = await getRpc().call<{
     count?: number;
+    has_gpu_data?: boolean;
     records?: RpcStatusRecord[] | Record<string, RpcStatusRecord[]>;
   }>(
     "common:getRecords",
@@ -444,7 +451,11 @@ export async function rpcGetLoadRecords(
     signal,
   );
   const records = normalizeRecordList(res.records, uuid);
-  return { count: res.count ?? records.length, records };
+  return {
+    count: res.count ?? records.length,
+    records,
+    has_gpu_data: res.has_gpu_data,
+  };
 }
 
 export async function rpcGetPingRecords(

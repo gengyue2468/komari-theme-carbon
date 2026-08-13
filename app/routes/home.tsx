@@ -85,6 +85,8 @@ export default function Home() {
   const nodes = useNodesStore((s) => s.nodes);
   const onlineIds = useNodesStore((s) => s.onlineIds);
   const realtime = useNodesStore((s) => s.realtime);
+  const realtimeUpdatedAt = useNodesStore((s) => s.realtimeUpdatedAt);
+  const realtimeReady = useNodesStore((s) => s.realtimeReady);
   const error = useNodesStore((s) => s.error);
   const showUptime = useNodesStore((s) => s.showUptime);
   const viewMode = useNodesStore((s) => s.viewMode);
@@ -110,6 +112,27 @@ export default function Home() {
   const [searchOpen, setSearchOpen] = useState(saved?.searchOpen ?? false);
   const [search, setSearch] = useState(saved?.search ?? "");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const mapHostRef = useRef<HTMLDivElement>(null);
+  const [mapVisible, setMapVisible] = useState(false);
+
+  useEffect(() => {
+    const host = mapHostRef.current;
+    if (!host) return;
+    if (!("IntersectionObserver" in window)) {
+      setMapVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setMapVisible(true);
+        observer.disconnect();
+      },
+      { rootMargin: "160px" },
+    );
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
 
   const groupTabs = useMemo(() => {
     const names = [...new Set(nodes.map((n) => n.group).filter(Boolean))].sort();
@@ -142,8 +165,8 @@ export default function Home() {
   const onlineSet = useMemo(() => new Set(onlineIds), [onlineIds]);
 
   const homeStats = useMemo(
-    () => computeHomeStats(nodes, realtime, onlineIds),
-    [nodes, realtime, onlineIds],
+    () => computeHomeStats(nodes, realtime, onlineIds, realtimeReady),
+    [nodes, realtime, onlineIds, realtimeReady],
   );
 
   useEffect(() => {
@@ -198,17 +221,31 @@ export default function Home() {
                   nodes={nodes}
                   realtime={realtime}
                   onlineIds={onlineIds}
+                  realtimeReady={realtimeReady}
                 />
               );
             })}
           </div>
         </div>
         <div className="home-header__right">
-          <Suspense
-            fallback={<div className="node-map node-map--placeholder" />}
-          >
-            <NodeWorldMap nodes={nodes} onlineIds={onlineIds} />
-          </Suspense>
+          <div ref={mapHostRef} className="node-map-lazy-host">
+            {mapVisible ? (
+              <Suspense
+                fallback={<div className="node-map node-map--placeholder" />}
+              >
+                <NodeWorldMap
+                  nodes={filtered}
+                  onlineIds={onlineIds}
+                  realtimeReady={realtimeReady}
+                />
+              </Suspense>
+            ) : (
+              <div
+                className="node-map node-map--placeholder"
+                aria-hidden="true"
+              />
+            )}
+          </div>
         </div>
       </header>
 
@@ -300,7 +337,15 @@ export default function Home() {
               key={node.uuid}
               node={node}
               online={onlineSet.has(node.uuid)}
-              metrics={realtime[node.uuid]}
+              realtimeReady={realtimeReady}
+              metrics={realtimeReady ? realtime[node.uuid] : undefined}
+              lastSeenAt={
+                realtimeReady && !onlineSet.has(node.uuid)
+                  ? realtimeUpdatedAt[node.uuid] ??
+                    realtime[node.uuid]?.updated_at ??
+                    node.updated_at
+                  : undefined
+              }
               showUptime={showUptime}
             />
           ))}
@@ -309,6 +354,7 @@ export default function Home() {
         <NodeTable
           nodes={filtered}
           onlineIds={onlineIds}
+          realtimeReady={realtimeReady}
           realtime={realtime}
         />
       )}

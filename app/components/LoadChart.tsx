@@ -310,7 +310,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
   const loading =
     loadQuery.isPending ||
     (!isLive && loadQuery.isFetching) ||
-    (isLive && !loadQuery.data);
+    (isLive && !loadQuery.data && !loadQuery.isError);
 
   const series = useMemo(() => {
     const down = downsample(records, isLive ? 90 : 120);
@@ -668,6 +668,8 @@ export function LoadChart({ uuid }: LoadChartProps) {
 
       {loading ? (
         <PageSpinner />
+      ) : loadQuery.isError && !loadQuery.data ? (
+        <p className="empty" role="alert">{t("detail.loadDataError")}</p>
       ) : series.length === 0 ? (
         <p className="empty">{t("detail.noLoadData")}</p>
       ) : (

@@ -15,6 +15,7 @@ interface StatPopoverProps {
   nodes: NodeInfo[];
   realtime: Record<string, RealtimeMetrics>;
   onlineIds: string[];
+  realtimeReady: boolean;
 }
 
 interface BreakdownRow {
@@ -26,10 +27,11 @@ interface BreakdownRow {
 
 function ramBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetrics>): BreakdownRow[] {
   return nodes
+    .filter((n) => realtime[n.uuid])
     .map((n) => {
       const m = realtime[n.uuid];
-      const used = m?.ram.used ?? 0;
-      const total = n.mem_total || m?.ram.total || 0;
+      const used = m.ram.used;
+      const total = n.mem_total || m.ram.total || 0;
       return {
         name: n.name,
         value: formatBytes(used),
@@ -43,10 +45,11 @@ function ramBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetric
 
 function diskBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetrics>): BreakdownRow[] {
   return nodes
+    .filter((n) => realtime[n.uuid])
     .map((n) => {
       const m = realtime[n.uuid];
-      const used = m?.disk.used ?? 0;
-      const total = n.disk_total || m?.disk.total || 0;
+      const used = m.disk.used;
+      const total = n.disk_total || m.disk.total || 0;
       return {
         name: n.name,
         value: formatBytes(used),
@@ -60,10 +63,11 @@ function diskBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetri
 
 function trafficBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetrics>): BreakdownRow[] {
   return nodes
+    .filter((n) => realtime[n.uuid])
     .map((n) => {
       const m = realtime[n.uuid];
-      const up = m?.network.totalUp ?? 0;
-      const down = m?.network.totalDown ?? 0;
+      const up = m.network.totalUp;
+      const down = m.network.totalDown;
       return {
         name: n.name,
         // Respect each node's traffic_limit_type: sum (双向), max (取大), up (出站), down.
@@ -85,10 +89,11 @@ function rateBreakdown(
   const online = new Set(onlineIds);
   return nodes
     .filter((n) => online.has(n.uuid))
+    .filter((n) => realtime[n.uuid])
     .map((n) => {
       const m = realtime[n.uuid];
-      const up = formatRate(m?.network.up ?? 0);
-      const down = formatRate(m?.network.down ?? 0);
+      const up = formatRate(m.network.up);
+      const down = formatRate(m.network.down);
       return primary === "up"
         ? {
             name: n.name,
@@ -117,6 +122,7 @@ export function StatPopover({
   nodes,
   realtime,
   onlineIds,
+  realtimeReady,
 }: StatPopoverProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -142,6 +148,7 @@ export function StatPopover({
   const panelId = `stat-popover-${id}`;
 
   const rows = useMemo<BreakdownRow[]>(() => {
+    if (!realtimeReady) return [];
     switch (id) {
       case "memory":
         return ramBreakdown(nodes, realtime);
@@ -156,7 +163,7 @@ export function StatPopover({
       default:
         return [];
     }
-  }, [id, nodes, realtime, onlineIds]);
+  }, [id, nodes, realtime, onlineIds, realtimeReady]);
 
   return (
     <div ref={rootRef} className="stat-popover-wrap">
@@ -208,7 +215,9 @@ export function StatPopover({
             onKeyDown={(e) => e.stopPropagation()}
           >
             <span className="stat-popover__head">{label}</span>
-            {rows.length === 0 ? (
+            {!realtimeReady ? (
+              <p className="stat-popover__empty">{t("app.statusLoading")}</p>
+            ) : rows.length === 0 ? (
               <p className="stat-popover__empty">—</p>
             ) : (
               <div className="stat-popover__list">

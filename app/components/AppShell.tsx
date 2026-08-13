@@ -42,7 +42,10 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
 
   const { pathname } = useLocation();
   useLayoutEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
   }, [pathname]);
 
   useEffect(() => {

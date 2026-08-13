@@ -65,15 +65,6 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-// Distinct tag colors by index
-const TAG_TYPES = ["blue", "cyan", "purple", "teal", "magenta"] as const;
-
-/**
- * Long node names auto-scroll (marquee) instead of squeezing the status dot /
- * badges. The <Marquee> is always mounted so the DOM stays stable (no
- * remount flicker); `play`/`autoFill` are toggled based on whether the name
- * actually overflows its container.
- */
 function ScrollingName({ name }: { name: string }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
@@ -82,36 +73,36 @@ function ScrollingName({ name }: { name: string }) {
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
+
     const check = () => {
       const text = textRef.current;
       if (!text) return;
       setOverflow(text.scrollWidth > wrap.clientWidth + 1);
     };
+
     check();
-    const ro = new ResizeObserver(check);
-    ro.observe(wrap);
-    return () => ro.disconnect();
+    const resizeObserver = new ResizeObserver(check);
+    resizeObserver.observe(wrap);
+    return () => resizeObserver.disconnect();
   }, [name]);
 
-  // Interop with react-fast-marquee (CJS): Vite dev's optimizeDeps exposes the
-  // module.exports object (component on .default); the production bundle
-  // interops the component directly. Handle both.
-  const MarqueeComp =
+  // react-fast-marquee exposes different interop shapes between dev and prod.
+  const MarqueeComponent =
     (Marquee as unknown as { default?: ComponentType }).default ?? Marquee;
 
   return (
     <div ref={wrapRef} className="detail-title__marquee">
-      <MarqueeComp
+      <MarqueeComponent
         play={overflow}
         autoFill={overflow}
         gradient={false}
         speed={40}
         pauseOnHover
       >
-        <span ref={textRef} className="detail-title__name">
+        <span ref={textRef} className="detail-title__name" title={name}>
           {name}
         </span>
-      </MarqueeComp>
+      </MarqueeComponent>
     </div>
   );
 }
@@ -123,13 +114,15 @@ export default function NodeDetail() {
   const nodes = useNodesStore((s) => s.nodes);
   const onlineIds = useNodesStore((s) => s.onlineIds);
   const realtime = useNodesStore((s) => s.realtime);
+  const realtimeReady = useNodesStore((s) => s.realtimeReady);
+  const realtimeUpdatedAt = useNodesStore((s) => s.realtimeUpdatedAt);
   const loading = useNodesStore((s) => s.loading);
   const recordEnabled =
     useNodesStore((s) => s.publicSettings?.record_enabled) !== false;
 
   const node = useMemo(() => nodes.find((n) => n.uuid === uuid), [nodes, uuid]);
-  const online = onlineIds.includes(uuid);
-  const metrics = realtime[uuid];
+  const online = realtimeReady && onlineIds.includes(uuid);
+  const metrics = realtimeReady ? realtime[uuid] : undefined;
 
   if (!node) {
     if (loading) return <PageSpinner />;
@@ -150,7 +143,8 @@ export default function NodeDetail() {
       )
     : 0;
   const hasLimit = node.traffic_limit > 0;
-  const trafficPct = hasLimit ? percentOf(trafficUsed, node.traffic_limit) : 0;
+  const trafficPct =
+    metrics && hasLimit ? percentOf(trafficUsed, node.traffic_limit) : null;
 
   const priceText =
     node.price < 0
@@ -169,19 +163,21 @@ export default function NodeDetail() {
   const finance = nodeFinance(node);
 
   // Live metric cards: quick snapshot before finance
-  const cpuPct = metrics?.cpu.usage ?? 0;
+  const cpuPct = metrics?.cpu.usage ?? null;
   const ramUsed = metrics?.ram.used ?? 0;
   const ramTotal = node.mem_total || metrics?.ram.total || 0;
-  const ramPct = percentOf(ramUsed, ramTotal);
+  const ramPct = metrics && ramTotal > 0 ? percentOf(ramUsed, ramTotal) : null;
   const diskUsed = metrics?.disk.used ?? 0;
   const diskTotal = node.disk_total || metrics?.disk.total || 0;
-  const diskPct = percentOf(diskUsed, diskTotal);
+  const diskPct =
+    metrics && diskTotal > 0 ? percentOf(diskUsed, diskTotal) : null;
   const tcpConns = metrics?.connections.tcp ?? 0;
   const udpConns = metrics?.connections.udp ?? 0;
   const conns = tcpConns + udpConns;
   const swapUsed = metrics?.swap.used ?? 0;
+  const swapTotal = node.swap_total || metrics?.swap.total || 0;
   const hasGpu = !!node.gpu_name && node.gpu_name !== "None";
-  const gpuPct = metrics?.gpu?.average_usage ?? 0;
+  const gpuPct = metrics?.gpu?.average_usage ?? null;
   const gpuDetails = metrics?.gpu?.detailed_info ?? [];
   const agentMessage = metrics?.message?.trim() || "";
 
@@ -189,7 +185,7 @@ export default function NodeDetail() {
     {
       key: "cpu",
       label: t("metrics.cpu"),
-      value: `${cpuPct.toFixed(0)}%`,
+      value: cpuPct != null ? `${cpuPct.toFixed(0)}%` : "—",
       icon: <Chip size={16} />,
       bar: cpuPct,
       hint: metrics
@@ -199,36 +195,42 @@ export default function NodeDetail() {
     {
       key: "ram",
       label: t("metrics.ram"),
-      value: formatBytes(ramUsed),
+      value: metrics ? formatBytes(ramUsed) : "—",
       icon: <DataBase size={16} />,
       bar: ramPct,
-      hint: `${ramPct.toFixed(0)}% / ${formatBytes(ramTotal)}`,
+      hint:
+        metrics && ramPct != null
+          ? `${ramPct.toFixed(0)}% / ${formatBytes(ramTotal)}`
+          : "",
     },
     {
       key: "disk",
       label: t("metrics.disk"),
-      value: formatBytes(diskUsed),
+      value: metrics ? formatBytes(diskUsed) : "—",
       icon: <DataVolume size={16} />,
       bar: diskPct,
-      hint: `${diskPct.toFixed(0)}% / ${formatBytes(diskTotal)}`,
+      hint:
+        metrics && diskPct != null
+          ? `${diskPct.toFixed(0)}% / ${formatBytes(diskTotal)}`
+          : "",
     },
     {
       key: "conn",
       label: t("metrics.connections"),
-      value: String(conns),
+      value: metrics ? String(conns) : "—",
       icon: <Application size={16} />,
-      bar: 0,
-      hint: `TCP ${tcpConns} · UDP ${udpConns}`,
+      bar: null,
+      hint: metrics ? `TCP ${tcpConns} · UDP ${udpConns}` : "",
     },
     ...(hasGpu
       ? [
           {
             key: "gpu",
             label: t("metrics.gpu"),
-            value: `${gpuPct.toFixed(0)}%`,
+            value: gpuPct != null ? `${gpuPct.toFixed(0)}%` : "—",
             icon: <Video size={16} />,
             bar: gpuPct,
-            hint: node.gpu_name,
+            hint: metrics?.gpu ? node.gpu_name : "",
           },
         ]
       : []),
@@ -285,13 +287,15 @@ export default function NodeDetail() {
     },
     {
       label: t("metrics.uptime"),
-      value: formatUptime(metrics?.uptime ?? 0),
+      value: metrics ? formatUptime(metrics.uptime) : "—",
       icon: <Time size={16} />,
     },
     {
       label: t("detail.lastSeen"),
-      value: metrics?.updated_at
-        ? new Date(metrics.updated_at).toLocaleString(i18n.language)
+      value: (realtimeReady && (realtimeUpdatedAt[uuid] ?? metrics?.updated_at))
+        ? new Date(
+            realtimeUpdatedAt[uuid] ?? metrics?.updated_at ?? "",
+          ).toLocaleString(i18n.language)
         : "—",
       icon: <RecentlyViewed size={16} />,
     },
@@ -308,22 +312,22 @@ export default function NodeDetail() {
   const storageItems = [
     {
       label: t("metrics.ram"),
-      value: ramUsed > 0 ? formatBytes(ramUsed) : formatBytes(node.mem_total),
-      sub: ramUsed > 0 ? `/ ${formatBytes(ramTotal)}` : "",
+      value: metrics ? formatBytes(ramUsed) : "—",
+      sub: ramTotal > 0 ? `/ ${formatBytes(ramTotal)}` : "",
       pct: ramPct,
       icon: <DataBase size={16} />,
     },
     {
       label: t("detail.swap"),
-      value: swapUsed > 0 ? formatBytes(swapUsed) : formatBytes(node.swap_total),
-      sub: swapUsed > 0 ? `/ ${formatBytes(node.swap_total)}` : "",
-      pct: node.swap_total > 0 ? percentOf(swapUsed, node.swap_total) : 0,
+      value: metrics ? formatBytes(swapUsed) : "—",
+      sub: swapTotal > 0 ? `/ ${formatBytes(swapTotal)}` : "",
+      pct: metrics && swapTotal > 0 ? percentOf(swapUsed, swapTotal) : null,
       icon: <DataBackup size={16} />,
     },
     {
       label: t("metrics.disk"),
-      value: diskUsed > 0 ? formatBytes(diskUsed) : formatBytes(node.disk_total),
-      sub: diskUsed > 0 ? `/ ${formatBytes(diskTotal)}` : "",
+      value: metrics ? formatBytes(diskUsed) : "—",
+      sub: diskTotal > 0 ? `/ ${formatBytes(diskTotal)}` : "",
       pct: diskPct,
       icon: <DataVolume size={16} />,
     },
@@ -345,21 +349,35 @@ export default function NodeDetail() {
           <h1 className="detail-title">
             <ScrollingName name={node.name} />
           </h1>
-          <span
-            className={`status-dot${online ? " is-on" : ""}`}
-            title={online ? t("app.online") : t("app.offline")}
-            aria-label={online ? t("app.online") : t("app.offline")}
-          />
-          {tags.map((tag, i) => (
-            <Tag key={tag} type={TAG_TYPES[i % TAG_TYPES.length]} size="sm">
-              {tag}
+          <div className="detail-top__meta">
+            <Tag
+              type={!realtimeReady ? "cool-gray" : online ? "blue" : "red"}
+              size="sm"
+              title={
+                !realtimeReady
+                  ? t("app.statusLoading")
+                  : online
+                    ? t("app.online")
+                    : t("app.offline")
+              }
+            >
+              {!realtimeReady
+                ? t("app.statusLoading")
+                : online
+                  ? t("app.online")
+                  : t("app.offline")}
             </Tag>
-          ))}
-          {node.auto_renewal ? (
-            <Tag type="blue" size="sm">
-              {t("detail.autoRenewal")}
-            </Tag>
-          ) : null}
+            {tags.map((tag) => (
+              <Tag key={tag} type="gray" size="sm">
+                {tag}
+              </Tag>
+            ))}
+            {node.auto_renewal ? (
+              <Tag type="blue" size="sm">
+                {t("detail.autoRenewal")}
+              </Tag>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -375,7 +393,10 @@ export default function NodeDetail() {
 
       <div className={`detail-live-grid${hasGpu ? " is-gpu" : ""}`}>
         {liveCards.map((card) => (
-          <Tile key={card.key} className="detail-metric-card">
+          <Tile
+            key={card.key}
+            className={`detail-metric-card${!realtimeReady ? " is-loading" : ""}`}
+          >
             <div className="detail-metric-card__top row-between">
               <span className="detail-metric-card__label">{card.label}</span>
               {card.icon}
@@ -383,11 +404,11 @@ export default function NodeDetail() {
             <div className="detail-metric-card__value-row">
               <span className="detail-metric-card__value mono">{card.value}</span>
             </div>
-            {card.bar > 0 && (
+            {card.bar != null && (
               <div className="detail-metric-card__bar-track">
                 <div
                   className={`detail-metric-card__bar-fill${card.bar >= 90 ? " is-warn" : ""}${card.bar >= 98 ? " is-error" : ""}`}
-                  style={{ width: `${Math.min(100, card.bar)}%` }}
+                  style={{ width: `${Math.min(100, Math.max(0, card.bar))}%` }}
                 />
               </div>
             )}
@@ -400,7 +421,10 @@ export default function NodeDetail() {
 
       <div className="detail-finance-grid">
         {financeCards.map((card) => (
-          <Tile key={card.key} className="detail-metric-card">
+          <Tile
+            key={card.key}
+            className="detail-metric-card detail-finance-card"
+          >
             <div className="detail-metric-card__top row-between">
               <span className="detail-metric-card__label">{card.label}</span>
               <card.Icon size={16} className="detail-metric-card__icon" />
@@ -468,11 +492,11 @@ export default function NodeDetail() {
                     <span className="detail-info-cell__sub"> {item.sub}</span>
                   ) : null}
                 </div>
-                {item.pct > 0 && (
+                {item.pct != null && (
                   <div className="detail-info-cell__bar-track">
                     <div
                       className={`detail-info-cell__bar-fill${item.pct >= 90 ? " is-warn" : ""}${item.pct >= 98 ? " is-error" : ""}`}
-                      style={{ width: `${Math.min(100, item.pct)}%` }}
+                      style={{ width: `${Math.min(100, Math.max(0, item.pct))}%` }}
                     />
                   </div>
                 )}
@@ -486,17 +510,17 @@ export default function NodeDetail() {
           <div className="detail-network-grid">
             <div
               className={`detail-info-cell detail-info-cell--traffic${
-                trafficPct >= 90
+                trafficPct != null && trafficPct >= 90
                   ? " is-error"
-                  : trafficPct >= 75
+                  : trafficPct != null && trafficPct >= 75
                     ? " is-warn"
                     : ""
               }`}
             >
-              {hasLimit ? (
+              {hasLimit && metrics ? (
                 <div
                   className="detail-traffic-fill"
-                  style={{ width: `${trafficPct}%` }}
+                  style={{ width: `${trafficPct ?? 0}%` }}
                   aria-hidden
                 />
               ) : null}
@@ -512,10 +536,12 @@ export default function NodeDetail() {
                   ) : null}
                 </div>
                 <div className="detail-info-cell__value mono">
-                  {hasLimit
+                  {hasLimit && metrics
                     ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)}`
-                    : t("detail.unlimited")}
-                  {hasLimit ? (
+                    : hasLimit
+                      ? "—"
+                      : t("detail.unlimited")}
+                  {hasLimit && trafficPct != null ? (
                     <span className="detail-traffic-pct">
                       {" "}
                       · {trafficPct.toFixed(1)}%
@@ -601,7 +627,11 @@ export default function NodeDetail() {
           </Suspense>
 
           <Suspense fallback={<PageSpinner />}>
-            <PingChart uuid={node.uuid} online={online} />
+            <PingChart
+              uuid={node.uuid}
+              online={online}
+              realtimeReady={realtimeReady}
+            />
           </Suspense>
         </>
       ) : (

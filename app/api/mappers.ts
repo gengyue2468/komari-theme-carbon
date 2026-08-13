@@ -135,11 +135,13 @@ export function mapStatusesToSnapshot(
 ): RealtimeSnapshot {
   const online: string[] = [];
   const data: Record<string, RealtimeMetrics> = {};
+  const updatedAt: Record<string, string> = {};
   for (const [uuid, st] of Object.entries(map)) {
     data[uuid] = mapStatusToMetricsCached(uuid, st);
+    updatedAt[uuid] = st.time || data[uuid].updated_at;
     if (st.online) online.push(uuid);
   }
-  return { online, data };
+  return { online, data, updatedAt };
 }
 
 /**
@@ -155,7 +157,6 @@ const metricsCache = new Map<
 
 function statusFingerprint(s: RpcNodeStatus): string {
   const parts = [
-    s.time ?? "",
     s.cpu,
     s.gpu ?? "",
     s.temp ?? "",
@@ -177,7 +178,6 @@ function statusFingerprint(s: RpcNodeStatus): string {
     s.connections,
     s.connections_udp,
     s.uptime,
-    s.online ? 1 : 0,
     s.message ?? "",
   ];
   if (s.gpu_detail?.detailed_info?.length) {
@@ -209,7 +209,11 @@ function mapStatusToMetricsCached(
   const hit = metricsCache.get(uuid);
   if (hit && hit.fp === fp) return hit.metrics;
   const metrics = mapStatusToMetrics(s);
-  if (metricsCache.size > 1000) metricsCache.clear();
+  if (!hit && metricsCache.size >= 1000) {
+    const oldest = metricsCache.keys().next().value;
+    if (typeof oldest === "string") metricsCache.delete(oldest);
+  }
+  if (hit) metricsCache.delete(uuid);
   metricsCache.set(uuid, { fp, metrics });
   return metrics;
 }

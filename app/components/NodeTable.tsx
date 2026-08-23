@@ -16,7 +16,6 @@ import { useNavigate } from "react-router";
 import { QuickIcon } from "~/components/BrandIcon";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
-  formatBillingCycle,
   formatBytes,
   formatRate,
   formatUptime,
@@ -26,14 +25,24 @@ import {
   trafficUsedBytes,
 } from "~/lib/format";
 import { getArchIcon, getOsIcon } from "~/lib/os-arch";
-import { selectPingNetworks } from "~/lib/ping-display";
-import type { NodeInfo, RealtimeMetrics } from "~/types/komari";
+import {
+  buildNodePingHistorySummary,
+  formatLatencyMs,
+  selectPingNetworks,
+} from "~/lib/ping-display";
+import { formatPriceWithCycle } from "~/lib/finance";
+import type {
+  NodeInfo,
+  PingHistoryResponse,
+  RealtimeMetrics,
+} from "~/types/komari";
 
 interface NodeTableProps {
   nodes: NodeInfo[];
   onlineIds: string[];
   realtimeReady: boolean;
   realtime: Record<string, RealtimeMetrics>;
+  pingHistory?: PingHistoryResponse;
 }
 
 function MiniBar({ pct }: { pct: number | null }) {
@@ -42,7 +51,7 @@ function MiniBar({ pct }: { pct: number | null }) {
   }
   const v = Math.min(100, Math.max(0, pct));
   const tone =
-    v >= 90 ? " card-bar__fill--error" : v >= 75 ? " card-bar__fill--warn" : "";
+    v >= 80 ? " card-bar__fill--error" : v >= 60 ? " card-bar__fill--warn" : "";
   return (
     <div className="card-bar card-bar--sm">
       <div className={`card-bar__fill${tone}`} style={{ width: `${v}%` }} />
@@ -54,7 +63,7 @@ function MetricCell({ pct, sub }: { pct: number | null; sub?: string }) {
   return (
     <div className="table-metric">
       <span className="table-metric__pct mono">
-        {pct == null ? "—" : `${pct.toFixed(0)}%`}
+        {pct == null ? "—" : `${pct.toFixed(1)}%`}
       </span>
       <MiniBar pct={pct} />
       {sub ? <span className="table-metric__sub mono">{sub}</span> : null}
@@ -71,6 +80,7 @@ export function NodeTable({
   onlineIds,
   realtimeReady,
   realtime,
+  pingHistory,
 }: NodeTableProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -113,13 +123,7 @@ export function NodeTable({
         const tPct =
           m && n.traffic_limit > 0 ? percentOf(tUsed, n.traffic_limit) : null;
         const tags = parseTags(n.tags);
-        const cycle = formatBillingCycle(n.billing_cycle);
-        const price =
-          n.price < 0
-            ? t("detail.free")
-            : n.price === 0
-              ? ""
-              : `${n.currency}${n.price}${cycle ? `/${cycle}` : ""}`;
+        const price = formatPriceWithCycle(n.price, n.billing_cycle, n.currency);
 
         return {
           id: n.uuid,
@@ -150,10 +154,18 @@ export function NodeTable({
           _netDown: m ? formatRate(m.network.down) : "—",
           _uptime: m ? formatUptime(m.uptime) : "—",
           _price: price,
-          _nets: selectPingNetworks(m?.ping),
+          _nets: (() => {
+            const history = buildNodePingHistorySummary(pingHistory, n.uuid);
+            return history
+              ? {
+                  visible: history.networks.slice(0, 3),
+                  extraCount: Math.max(0, history.networks.length - 3),
+                }
+              : selectPingNetworks(m?.ping);
+          })(),
         };
       }),
-    [nodes, onlineSet, realtime, realtimeReady, t],
+    [nodes, onlineSet, realtime, realtimeReady, t, pingHistory],
   );
 
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
@@ -219,7 +231,9 @@ export function NodeTable({
                       }}
                     >
                       <TableCell>
-                        <span className="table-status">
+                        <span
+                          className={`table-status${!realtimeReady ? " is-loading" : d._on ? " is-online" : " is-offline"}`}
+                        >
                           <span
                             className={`table-dot${!realtimeReady ? " is-loading" : d._on ? " is-on" : ""}`}
                             aria-hidden
@@ -299,10 +313,10 @@ export function NodeTable({
                       <TableCell>
                         <MetricCell
                           pct={d._ramPct}
-                          sub={
-                            d._m
+                           sub={
+                             d._m
                                ? `${formatBytes(d._m.ram.used)} / ${formatBytes(d._n.mem_total || d._m.ram.total)}`
-                              : undefined
+                               : undefined
                           }
                         />
                       </TableCell>
@@ -310,10 +324,10 @@ export function NodeTable({
                       <TableCell>
                         <MetricCell
                           pct={d._diskPct}
-                          sub={
-                            d._m
+                           sub={
+                             d._m
                                ? `${formatBytes(d._m.disk.used)} / ${formatBytes(d._n.disk_total || d._m.disk.total)}`
-                              : undefined
+                               : undefined
                           }
                         />
                       </TableCell>
@@ -369,10 +383,8 @@ export function NodeTable({
                                 >
                                   {point.name || point.id}
                                 </span>
-                                <span className="table-ping-cell__metric mono">
-                                  {point.latencyMs != null
-                                    ? `${point.latencyMs}ms`
-                                    : "—"}
+                                 <span className="table-ping-cell__metric mono">
+                                   {formatLatencyMs(point.latencyMs)}
                                 </span>
                                 <span className="table-ping-cell__metric mono">
                                   {point.lossPct != null

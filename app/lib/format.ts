@@ -1,15 +1,77 @@
 import i18n from "~/i18n";
 
+const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB", "PB"] as const;
+
+export interface ByteDecimalsConfig {
+  B?: number;
+  KB?: number;
+  MB?: number;
+  GB?: number;
+  TB?: number;
+}
+
+const DEFAULT_BYTE_DECIMALS: Required<ByteDecimalsConfig> = {
+  B: 0,
+  KB: 0,
+  MB: 1,
+  GB: 1,
+  TB: 1,
+};
+
+function byteUnitIndex(bytes: number): number {
+  return Math.min(
+    Math.max(0, Math.floor(Math.log(bytes) / Math.log(1024))),
+    BYTE_UNITS.length - 1,
+  );
+}
+
+function decimalsForUnit(
+  unit: (typeof BYTE_UNITS)[number],
+  config: Required<ByteDecimalsConfig>,
+): number {
+  return unit === "TB" || unit === "PB" ? config.TB : config[unit];
+}
+
+export function formatBytesWithConfig(
+  bytes: number,
+  config?: ByteDecimalsConfig,
+): string {
+  const merged = { ...DEFAULT_BYTE_DECIMALS, ...config };
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return merged.B === -1 ? "0 KB" : "0 B";
+  }
+
+  const index = byteUnitIndex(bytes);
+  let target = index;
+  while (target < BYTE_UNITS.length - 1 && decimalsForUnit(BYTE_UNITS[target], merged) === -1) {
+    target += 1;
+  }
+  const unit = BYTE_UNITS[target];
+  const decimals = decimalsForUnit(unit, merged);
+  return `${(bytes / 1024 ** target).toFixed(decimals === -1 ? 1 : decimals)} ${unit}`;
+}
+
+export function formatBytesSplit(
+  bytes: number,
+  config?: ByteDecimalsConfig,
+): { value: string; unit: string } {
+  const formatted = formatBytesWithConfig(bytes, config);
+  const [value, unit] = formatted.split(" ");
+  return { value: value ?? "0", unit: unit ?? "B" };
+}
+
 export function formatBytes(bytes: number, decimals = 1): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB", "PB"];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
-  return `${(bytes / k ** i).toFixed(decimals)} ${sizes[i]}`;
+  const index = byteUnitIndex(bytes);
+  return `${(bytes / 1024 ** index).toFixed(decimals)} ${BYTE_UNITS[index]}`;
+}
+
+export function formatBytesPerSecond(bytes: number): string {
+  return `${formatBytes(bytes)}/s`;
 }
 
 export function formatRate(bytesPerSec: number): string {
-  return `${formatBytes(bytesPerSec)}/s`;
+  return formatBytesPerSecond(bytesPerSec);
 }
 
 export function formatPercent(value: number, digits = 1): string {
@@ -17,31 +79,55 @@ export function formatPercent(value: number, digits = 1): string {
   return `${value.toFixed(digits)}%`;
 }
 
-export function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return "—";
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const parts: string[] = [];
-  if (d > 0) parts.push(i18n.t("time.days", { count: d }));
-  if (h > 0) parts.push(i18n.t("time.hours", { count: h }));
-  if (m > 0 || parts.length === 0) {
-    parts.push(i18n.t("time.minutes", { count: m }));
+export type UptimeFormat = "day" | "hour" | "minute" | "second";
+
+export function formatUptimeWithFormat(
+  seconds: number,
+  format: UptimeFormat = "day",
+): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return i18n.t("time.seconds", { count: 0 });
   }
-  return parts.join(" ");
+  const units = [
+    { value: 86400, key: "time.days" },
+    { value: 3600, key: "time.hours" },
+    { value: 60, key: "time.minutes" },
+    { value: 1, key: "time.seconds" },
+  ] as const;
+  const maxIndex = { day: 0, hour: 1, minute: 2, second: 3 }[format];
+  let remaining = seconds;
+  const parts: string[] = [];
+  for (let i = 0; i <= maxIndex; i += 1) {
+    const unit = units[i];
+    const amount = Math.floor(remaining / unit.value);
+    if (amount > 0) {
+      parts.push(i18n.t(unit.key, { count: amount }));
+      remaining %= unit.value;
+    }
+  }
+  if (parts.length > 0) return parts.join(" ");
+  const unit = units[maxIndex];
+  return i18n.t("time.lessThan", {
+    unit: i18n.t(unit.key, { count: 1 }),
+  });
+}
+
+export function formatDuration(seconds: number): string {
+  return formatUptimeWithFormat(seconds, "minute");
 }
 
 export function formatUptime(seconds: number): string {
-  return formatDuration(seconds);
+  return formatUptimeWithFormat(seconds, "second");
 }
 
 /**
  * Billing cycle (days) → semantic label, matching Komari's renewal mapping
  * (27–32=month, 87–95=quarter, 175–185=half-year, 360–370=year, …).
- * Non-positive cycles (e.g. -1) mean a one-time / lifetime price → "一次性/Once".
+ * A cycle of -1 means a one-time / lifetime price → "一次性/Once".
  */
 export function formatBillingCycle(days: number): string {
-  if (!Number.isFinite(days) || days <= 0) return i18n.t("billing.once");
+  if (!Number.isFinite(days)) return i18n.t("billing.once");
+  if (days === -1) return i18n.t("billing.once");
   if (days >= 27 && days <= 32) return i18n.t("billing.monthly");
   if (days >= 87 && days <= 95) return i18n.t("billing.quarterly");
   if (days >= 175 && days <= 185) return i18n.t("billing.semiannual");
@@ -82,7 +168,7 @@ export function percentOf(used: number, total: number): number {
 
 /**
  * Traffic used bytes per Komari traffic_limit_type:
- * sum (双向) | max (取大) | min (取小) | up (出站) | down (入站). Default max.
+ * sum (双向) | max (取大) | min (取小) | up (出站) | down (入站). Default sum.
  */
 export function trafficUsedBytes(
   totalUp: number,
@@ -91,7 +177,7 @@ export function trafficUsedBytes(
 ): number {
   const up = totalUp || 0;
   const down = totalDown || 0;
-  switch ((limitType || "max").toLowerCase()) {
+  switch ((limitType || "sum").toLowerCase()) {
     case "sum":
       return up + down;
     case "min":
@@ -108,7 +194,7 @@ export function trafficUsedBytes(
 
 /** Localized label for Komari traffic_limit_type (max/sum/min/up/down). */
 export function trafficLimitTypeLabel(limitType?: string | null): string {
-  switch ((limitType || "max").toLowerCase()) {
+  switch ((limitType || "sum").toLowerCase()) {
     case "sum":
       return i18n.t("trafficType.sum");
     case "min":
@@ -142,7 +228,7 @@ export function billingCycleMonths(days: number): number {
 export function parseTags(tags: string): string[] {
   if (!tags.trim()) return [];
   return tags
-    .split(/[;,|]/)
+    .split(";")
     .map((t) => t.trim())
     .filter(Boolean);
 }

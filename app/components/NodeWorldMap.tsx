@@ -71,7 +71,7 @@ export function NodeWorldMap({
     return ids;
   }, [nodes]);
 
-  const onlineCount = points.filter((p) => onlineSet.has(p.uuid)).length;
+  const onlineCount = nodes.filter((node) => onlineSet.has(node.uuid)).length;
 
   const viewDirty =
     position.zoom !== DEFAULT_ZOOM ||
@@ -85,16 +85,16 @@ export function NodeWorldMap({
 
   return (
     <Tile className="node-map">
-      <div className="node-map__head">
-        <span className="node-map__title">{t("map.title")}</span>
+      <div
+        className="node-map__canvas"
+        role="region"
+        aria-label={t("map.title")}
+      >
         <span className="node-map__meta mono">
           {!realtimeReady
             ? t("app.statusLoading")
-            : `${onlineCount}/${points.length} ${t("app.online")}`}
+            : `${onlineCount}/${nodes.length} ${t("app.online")}`}
         </span>
-      </div>
-
-      <div className="node-map__canvas">
         <ComposableMap
           projection="geoEqualEarth"
           projectionConfig={{ scale: 155, center: [12, 6] }}
@@ -172,7 +172,9 @@ export function NodeWorldMap({
                         ) {
                           return;
                         }
-                        setHover((prev) => (prev?.key === m.key ? null : prev));
+                        setHover((prev) =>
+                          prev?.key === m.key ? null : prev,
+                        );
                       }, 0);
                     }}
                     onClick={() => {

@@ -6,10 +6,10 @@ import {
   type LineChartOptions,
 } from "@carbon/charts";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dataSource } from "~/api/datasource";
-import { buildPingChartModel } from "~/lib/ping-display";
+import { buildPingChartModel, formatLatencyMs } from "~/lib/ping-display";
 import { PageSpinner } from "~/components/PageSpinner";
 import {
   buildChartLocale,
@@ -31,6 +31,95 @@ interface ChartPoint {
   group: string;
   date: Date;
   value: number;
+}
+
+interface LossMarker {
+  time: string;
+  left: number;
+}
+
+interface PingLineChartProps {
+  data: ChartPoint[];
+  options: LineChartOptions;
+  lossMarkers: LossMarker[];
+}
+
+function PingLineChart({ data, options, lossMarkers }: PingLineChartProps) {
+  const plotRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<SVGSVGElement>(null);
+
+  useEffect(() => {
+    const plot = plotRef.current;
+    const overlay = overlayRef.current;
+    if (!plot || !overlay) return;
+
+    let frame = 0;
+    let observedBackdrop: SVGSVGElement | null = null;
+    let resizeObserver: ResizeObserver;
+    const syncOverlay = () => {
+      const backdrop = plot.querySelector<SVGSVGElement>(
+        "svg.chart-grid-backdrop",
+      );
+      if (backdrop !== observedBackdrop) {
+        if (observedBackdrop) resizeObserver.unobserve(observedBackdrop);
+        observedBackdrop = backdrop;
+        if (observedBackdrop) resizeObserver.observe(observedBackdrop);
+      }
+      if (!backdrop) {
+        overlay.style.visibility = "hidden";
+        return;
+      }
+
+      const plotRect = plot.getBoundingClientRect();
+      const backdropRect = backdrop.getBoundingClientRect();
+      overlay.style.left = `${backdropRect.left - plotRect.left}px`;
+      overlay.style.top = `${backdropRect.top - plotRect.top}px`;
+      overlay.style.width = `${backdropRect.width}px`;
+      overlay.style.height = `${backdropRect.height}px`;
+      overlay.style.visibility = "visible";
+    };
+    const scheduleSync = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        syncOverlay();
+      });
+    };
+
+    resizeObserver = new ResizeObserver(scheduleSync);
+    resizeObserver.observe(plot);
+    const observer = new MutationObserver(scheduleSync);
+    observer.observe(plot, { childList: true, subtree: true });
+    syncOverlay();
+
+    return () => {
+      observer.disconnect();
+      resizeObserver.disconnect();
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  return (
+    <div ref={plotRef} className="ping-chart-main__plot">
+      <LineChart data={data} options={options} />
+      <svg
+        ref={overlayRef}
+        className="ping-chart-loss-overlay"
+        aria-hidden="true"
+        focusable="false"
+      >
+        {lossMarkers.map((marker) => (
+          <line
+            key={marker.time}
+            x1={`${marker.left}%`}
+            x2={`${marker.left}%`}
+            y1="0"
+            y2="100%"
+          />
+        ))}
+      </svg>
+    </div>
+  );
 }
 
 const RANGES: Array<{ key: RangeKey; hours: number }> = [
@@ -156,6 +245,38 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
     return out;
   }, [points, selectedIds, tasks]);
 
+  const chartTimeDomain = useMemo(() => {
+    const timestamps = points
+      .map((point) => Date.parse(point.time))
+      .filter(Number.isFinite);
+    if (timestamps.length === 0) return null;
+
+    const first = Math.min(...timestamps);
+    const last = Math.max(...timestamps);
+    if (first === last) {
+      return { start: first - 30_000, end: last + 30_000 };
+    }
+    return { start: first, end: last };
+  }, [points]);
+
+  const lossMarkers = useMemo<LossMarker[]>(() => {
+    const active = new Set(selectedIds);
+    if (!chartTimeDomain || active.size === 0) return [];
+
+    const span = chartTimeDomain.end - chartTimeDomain.start;
+    return points.flatMap((point) => {
+      const timestamp = Date.parse(point.time);
+      if (!Number.isFinite(timestamp)) return [];
+      const hasLoss = [...active].some((id) => point.losses[id] === true);
+      return hasLoss
+        ? [{
+            time: point.time,
+            left: ((timestamp - chartTimeDomain.start) / span) * 100,
+          }]
+        : [];
+    });
+  }, [chartTimeDomain, points, selectedIds]);
+
   const colorScale = useMemo(() => {
     const scale: Record<string, string> = {};
     for (const task of tasks) scale[task.name] = task.color;
@@ -164,7 +285,7 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
 
   const language = i18n.language;
   const msFormatter = useMemo(
-    () => makeTooltipValueFormatter(language, (v) => `${v} ms`),
+    () => makeTooltipValueFormatter(language, formatLatencyMs),
     [language],
   );
 
@@ -175,6 +296,9 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
         bottom: {
           mapsTo: "date",
           scaleType: ScaleTypes.TIME,
+          domain: chartTimeDomain
+            ? [new Date(chartTimeDomain.start), new Date(chartTimeDomain.end)]
+            : undefined,
           ticks: { number: 10 },
           title: t("chart.time"),
         },
@@ -188,6 +312,7 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
       curve: "curveNatural",
       height: "320px",
       theme,
+      timeScale: { addSpaceOnEdges: 0 },
       toolbar: { enabled: false },
       legend: {
         enabled: true,
@@ -213,7 +338,15 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
         },
       },
     }),
-    [theme, colorScale, chartLocale, t, language, msFormatter],
+    [
+      theme,
+      colorScale,
+      chartLocale,
+      chartTimeDomain,
+      t,
+      language,
+      msFormatter,
+    ],
   );
 
   const rangeLabels: Record<RangeKey, string> = {
@@ -228,6 +361,8 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   };
+
+  const hasChartVisual = chartData.length > 0;
 
   const renderToolbar = () => (
     <div className="ping-chart-panel__toolbar">
@@ -291,12 +426,12 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
             <div className="ping-task-card__top">
               <span className="ping-task-card__name">{task.name}</span>
               <span className="ping-task-card__latest mono">
-                {task.latest != null ? `${task.latest} ms` : "—"}
+                {formatLatencyMs(task.latest)}
               </span>
             </div>
             <div className="ping-task-card__stats mono">
               <span>
-                {t("detail.avg")} {task.avg != null ? `${task.avg} ms` : "—"}
+                {t("detail.avg")} {formatLatencyMs(task.avg)}
               </span>
               <span>
                 {t("metrics.loss")} {task.lossPct.toFixed(1)}%
@@ -333,29 +468,35 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
           {renderTaskGrid()}
 
           <Tile
-            className={`ping-chart-main${chartData.length > 0 ? " is-interactive" : ""}`}
-            role={chartData.length > 0 ? "button" : undefined}
-            tabIndex={chartData.length > 0 ? 0 : undefined}
+            className={`ping-chart-main${hasChartVisual ? " is-interactive" : ""}`}
+            role={hasChartVisual ? "button" : undefined}
+            tabIndex={hasChartVisual ? 0 : undefined}
             aria-label={
-              chartData.length > 0 ? t("detail.openPingChart") : undefined
+              hasChartVisual ? t("detail.openPingChart") : undefined
             }
             onClick={() => {
-              if (chartData.length > 0) setDialogOpen(true);
+              if (hasChartVisual) setDialogOpen(true);
             }}
             onKeyDown={(event) => {
-              if (chartData.length === 0) return;
+              if (!hasChartVisual) return;
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 setDialogOpen(true);
               }
             }}
           >
-            {chartData.length === 0 ? (
+            {!hasChartVisual ? (
               <div className="ping-chart-main__empty">
                 {t("detail.noPingData")}
               </div>
             ) : (
-              <LineChart data={chartData} options={options} />
+              <div className="ping-chart-main__visual">
+                <PingLineChart
+                  data={chartData}
+                  options={options}
+                  lossMarkers={lossMarkers}
+                />
+              </div>
             )}
           </Tile>
         </>
@@ -375,13 +516,16 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
           <div className="ping-chart-dialog__chart">
             {loading ? (
               <PageSpinner />
-            ) : chartData.length === 0 ? (
+            ) : !hasChartVisual ? (
               <div className="ping-chart-main__empty">{t("detail.noPingData")}</div>
             ) : (
-              <LineChart
-                data={chartData}
-                options={{ ...options, height: "460px" }}
-              />
+              <div className="ping-chart-main__visual">
+                <PingLineChart
+                  data={chartData}
+                  options={{ ...options, height: "460px" }}
+                  lossMarkers={lossMarkers}
+                />
+              </div>
             )}
           </div>
         </Modal>

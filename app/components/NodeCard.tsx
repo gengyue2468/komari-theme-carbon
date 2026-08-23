@@ -4,14 +4,15 @@ import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
+  buildNodePingHistorySummary,
   cardPingFromMetrics,
+  formatLatencyMs,
   selectPingNetworks,
 } from "~/lib/ping-display";
 import { barToneClass } from "~/lib/ping-tone";
 import { QuickIcon } from "~/components/BrandIcon";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
-  formatBillingCycle,
   formatBytes,
   formatRate,
   formatUptime,
@@ -21,13 +22,19 @@ import {
   trafficUsedBytes,
 } from "~/lib/format";
 import { getArchIcon, getOsIcon, getVirtIcon } from "~/lib/os-arch";
-import type { NodeInfo, RealtimeMetrics } from "~/types/komari";
+import { formatPriceWithCycle } from "~/lib/finance";
+import type {
+  NodeInfo,
+  PingHistoryResponse,
+  RealtimeMetrics,
+} from "~/types/komari";
 
 interface NodeCardProps {
   node: NodeInfo;
   online: boolean;
   realtimeReady: boolean;
   metrics?: RealtimeMetrics;
+  pingHistory?: PingHistoryResponse;
   lastSeenAt?: string;
   showUptime?: boolean;
 }
@@ -42,7 +49,7 @@ function Bar({ pct }: { pct: number | null }) {
   return (
     <div className="card-bar">
       <div
-        className={`card-bar__fill${v >= 90 ? " card-bar__fill--error" : v >= 75 ? " card-bar__fill--warn" : ""}`}
+        className={`card-bar__fill${v >= 80 ? " card-bar__fill--error" : v >= 60 ? " card-bar__fill--warn" : ""}`}
         style={{ width: `${v}%` }}
       />
     </div>
@@ -157,13 +164,7 @@ function StatGroup({ node, metrics, showUptime }: Pick<NodeCardProps, "node" | "
       ? percentOf(trafficUsed, node.traffic_limit)
       : null;
 
-  const cycle = formatBillingCycle(node.billing_cycle);
-  const price =
-    node.price < 0
-      ? t("detail.free")
-      : node.price === 0
-        ? "—"
-        : `${node.currency}${node.price}${cycle ? `/${cycle}` : ""}`;
+  const price = formatPriceWithCycle(node.price, node.billing_cycle, node.currency);
 
   const ramUsed = metrics ? formatBytes(metrics.ram.used) : "—";
   const ramTotal = formatBytes(ramTotalBytes);
@@ -175,10 +176,10 @@ function StatGroup({ node, metrics, showUptime }: Pick<NodeCardProps, "node" | "
       <section className="card-section">
         <h3 className="card-section__title">{t("detail.system")}</h3>
         <div className="card-kv-grid">
-          <Kv label={t("metrics.cpu")} value={cpu != null ? cpu.toFixed(0) : "—"} unit={cpu != null ? "%" : undefined} pct={cpu} hint={metrics ? `${metrics.load.load1.toFixed(2)}, ${metrics.load.load5.toFixed(2)}, ${metrics.load.load15.toFixed(2)}` : "—"} />
-          <Kv label={t("metrics.ram")} value={ram != null ? ram.toFixed(0) : "—"} unit={ram != null ? "%" : undefined} pct={ram} hint={metrics ? `${ramUsed} / ${ramTotal}` : "—"} />
-          <Kv label={t("metrics.disk")} value={disk != null ? disk.toFixed(0) : "—"} unit={disk != null ? "%" : undefined} pct={disk} hint={metrics ? `${diskUsed} / ${diskTotal}` : "—"} />
-          <Kv label={t("metrics.traffic")} value={trafficPct != null ? trafficPct.toFixed(0) : "—"} unit={trafficPct != null ? "%" : undefined} pct={trafficPct} hint={metrics && node.traffic_limit > 0 ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)} · ${trafficLimitTypeLabel(node.traffic_limit_type)}` : node.traffic_limit > 0 ? "—" : "∞"} />
+          <Kv label={t("metrics.cpu")} value={cpu != null ? cpu.toFixed(1) : "—"} unit={cpu != null ? "%" : undefined} pct={cpu} hint={metrics ? `${metrics.load.load1.toFixed(2)}, ${metrics.load.load5.toFixed(2)}, ${metrics.load.load15.toFixed(2)}` : "—"} />
+          <Kv label={t("metrics.ram")} value={ram != null ? ram.toFixed(1) : "—"} unit={ram != null ? "%" : undefined} pct={ram} hint={metrics ? `${ramUsed} / ${ramTotal}` : "—"} />
+          <Kv label={t("metrics.disk")} value={disk != null ? disk.toFixed(1) : "—"} unit={disk != null ? "%" : undefined} pct={disk} hint={metrics ? `${diskUsed} / ${diskTotal}` : "—"} />
+          <Kv label={t("metrics.traffic")} value={trafficPct != null ? trafficPct.toFixed(1) : "—"} unit={trafficPct != null ? "%" : undefined} pct={trafficPct} hint={metrics && node.traffic_limit > 0 ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)} · ${trafficLimitTypeLabel(node.traffic_limit_type)}` : node.traffic_limit > 0 ? "—" : "∞"} />
         </div>
       </section>
       <section className="card-section">
@@ -198,17 +199,30 @@ function StatGroup({ node, metrics, showUptime }: Pick<NodeCardProps, "node" | "
 }
 
 function SectionPing({
+  nodeUuid,
   metrics,
+  pingHistory,
   realtimeReady,
   onOpenMore,
 }: {
+  nodeUuid: string;
   metrics?: RealtimeMetrics;
+  pingHistory?: PingHistoryResponse;
   realtimeReady: boolean;
   onOpenMore: () => void;
 }) {
   const { t } = useTranslation();
-  const ping = useMemo(() => selectPingNetworks(metrics?.ping), [metrics?.ping]);
-  const summary = useMemo(() => cardPingFromMetrics(metrics), [metrics]);
+  const historySummary = useMemo(
+    () => buildNodePingHistorySummary(pingHistory, nodeUuid),
+    [pingHistory, nodeUuid],
+  );
+  const ping = historySummary
+    ? {
+        visible: historySummary.networks.slice(0, 3),
+        extraCount: Math.max(0, historySummary.networks.length - 3),
+      }
+    : selectPingNetworks(metrics?.ping);
+  const summary = historySummary ?? cardPingFromMetrics(metrics);
 
   return (
     <section className="card-section">
@@ -227,23 +241,23 @@ function SectionPing({
               <div className="card-ping-point__strips">
                 <PingStrip
                   label={t("metrics.latency")}
-                  value={point.latencyMs != null ? `${point.latencyMs} ms` : "—"}
+                  value={formatLatencyMs(point.latencyMs)}
                   metric="latency"
                   bars={
-                    point.latencyMs != null
-                      ? [{ time: point.id, latency: point.latencyMs, loss: null }]
-                      : []
+                    point.latencyMs != null && point.latencyMs < 0
+                      ? [{ time: point.id, latency: -1, loss: null }]
+                      : historySummary?.bars ?? (point.latencyMs != null
+                        ? [{ time: point.id, latency: point.latencyMs, loss: null }]
+                        : [])
                   }
                 />
                 <PingStrip
                   label={t("metrics.loss")}
                   value={point.lossPct != null ? `${point.lossPct.toFixed(1)}%` : "—"}
                   metric="loss"
-                  bars={
-                    point.lossPct != null
-                      ? [{ time: point.id, latency: null, loss: point.lossPct }]
-                      : []
-                  }
+                  bars={historySummary?.bars ?? (point.lossPct != null
+                    ? [{ time: point.id, latency: null, loss: point.lossPct }]
+                    : [])}
                 />
               </div>
             </div>
@@ -265,7 +279,7 @@ function SectionPing({
           <div className="card-ping-points__summary">
             <PingStrip
               label={t("metrics.latency")}
-              value={summary.avgLatencyMs != null ? `${summary.avgLatencyMs} ms` : "—"}
+              value={formatLatencyMs(summary.avgLatencyMs)}
               metric="latency"
               bars={summary.bars}
             />
@@ -290,6 +304,7 @@ export const NodeCard = memo(
     online,
     realtimeReady,
     metrics,
+    pingHistory,
     lastSeenAt,
     showUptime,
   }: NodeCardProps) {
@@ -358,7 +373,9 @@ export const NodeCard = memo(
 
         <StatGroup node={node} metrics={metrics} showUptime={showUptime} />
         <SectionPing
+          nodeUuid={node.uuid}
           metrics={metrics}
+          pingHistory={pingHistory}
           realtimeReady={realtimeReady}
           onOpenMore={() => navigate(`/node/${node.uuid}#ping-chart`)}
         />
@@ -382,5 +399,6 @@ export const NodeCard = memo(
     prev.lastSeenAt === next.lastSeenAt &&
     prev.showUptime === next.showUptime &&
     prev.node === next.node &&
-    prev.metrics === next.metrics,
+    prev.metrics === next.metrics &&
+    prev.pingHistory === next.pingHistory,
 );

@@ -1,4 +1,5 @@
 import {
+  Button,
   IconButton,
   Search,
   Tab,
@@ -18,6 +19,7 @@ import {
   Search as SearchIcon,
 } from "@carbon/icons-react";
 import type { CarbonIconType } from "@carbon/icons-react";
+import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigationType } from "react-router";
@@ -26,7 +28,10 @@ import { HomeStatCard } from "~/components/HomeStatCard";
 import { NodeCard } from "~/components/NodeCard";
 import { NodeTable } from "~/components/NodeTable";
 import { StatPopover } from "~/components/StatPopover";
+import { dataSource } from "~/api/datasource";
+import { isNodeInGroup, parseNodeGroups } from "~/lib/groups";
 import { computeHomeStats } from "~/lib/home-stats";
+import { queryKeys } from "~/lib/query-client";
 import { useNodesStore } from "~/stores/nodes";
 import type { Route } from "./+types/home";
 
@@ -91,6 +96,14 @@ export default function Home() {
   const showUptime = useNodesStore((s) => s.showUptime);
   const viewMode = useNodesStore((s) => s.viewMode);
   const setViewMode = useNodesStore((s) => s.setViewMode);
+  const recentPingQuery = useQuery({
+    queryKey: queryKeys.recentPingHistory(1),
+    queryFn: ({ signal }) => dataSource.getRecentPingHistory(1, signal),
+    enabled: nodes.length > 0,
+    staleTime: 60_000,
+    gcTime: 60_000,
+    refetchInterval: 60_000,
+  });
 
   // POP = back/forward: restore the UI snapshot. Reload = fresh entry (don't
   // resurrect stale filters/scroll from an earlier visit in this tab).
@@ -135,7 +148,9 @@ export default function Home() {
   }, []);
 
   const groupTabs = useMemo(() => {
-    const names = [...new Set(nodes.map((n) => n.group).filter(Boolean))].sort();
+    const names = [
+      ...new Set(nodes.flatMap((node) => parseNodeGroups(node.group))),
+    ].sort();
     return [
       { id: "all", label: t("app.allGroups") },
       ...names.map((name) => ({ id: name, label: name })),
@@ -147,26 +162,35 @@ export default function Home() {
     groupTabs.findIndex((tab) => tab.id === group),
   );
 
+  const groupNodes = useMemo(
+    () => nodes.filter((node) => isNodeInGroup(node.group, group)),
+    [nodes, group],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return nodes.filter((n) => {
-      if (group !== "all" && n.group !== group) return false;
+    return groupNodes.filter((n) => {
       if (!q) return true;
       return (
         n.name.toLowerCase().includes(q) ||
         n.os.toLowerCase().includes(q) ||
         n.tags.toLowerCase().includes(q) ||
-        n.group.toLowerCase().includes(q) ||
-        n.region.toLowerCase().includes(q)
+        parseNodeGroups(n.group).some((name) =>
+          name.toLowerCase().includes(q),
+        ) ||
+        n.region.toLowerCase().includes(q) ||
+        n.remark?.toLowerCase().includes(q)
       );
     });
-  }, [nodes, group, search]);
+  }, [groupNodes, search]);
+
+  const hasFilters = group !== "all" || search.trim().length > 0;
 
   const onlineSet = useMemo(() => new Set(onlineIds), [onlineIds]);
 
   const homeStats = useMemo(
-    () => computeHomeStats(nodes, realtime, onlineIds, realtimeReady),
-    [nodes, realtime, onlineIds, realtimeReady],
+    () => computeHomeStats(groupNodes, realtime, onlineIds, realtimeReady),
+    [groupNodes, realtime, onlineIds, realtimeReady],
   );
 
   useEffect(() => {
@@ -192,6 +216,11 @@ export default function Home() {
     setSearch("");
   };
 
+  const clearFilters = () => {
+    setGroup("all");
+    closeSearch();
+  };
+
   if (error) {
     throw new Error(error);
   }
@@ -206,7 +235,7 @@ export default function Home() {
               return stat.id === "remaining" ? (
                 <FinancePopover
                   key={stat.id}
-                  nodes={nodes}
+                  nodes={groupNodes}
                   label={t(stat.labelKey)}
                 />
               ) : (
@@ -218,7 +247,7 @@ export default function Home() {
                   unit={stat.unit}
                   suffix={stat.suffix}
                   icon={<Icon size={16} className="home-stat-card__icon" />}
-                  nodes={nodes}
+                  nodes={groupNodes}
                   realtime={realtime}
                   onlineIds={onlineIds}
                   realtimeReady={realtimeReady}
@@ -234,7 +263,7 @@ export default function Home() {
                 fallback={<div className="node-map node-map--placeholder" />}
               >
                 <NodeWorldMap
-                  nodes={filtered}
+                  nodes={groupNodes}
                   onlineIds={onlineIds}
                   realtimeReady={realtimeReady}
                 />
@@ -329,7 +358,16 @@ export default function Home() {
       </div>
 
       {filtered.length === 0 ? (
-        <p className="empty">{t("app.empty")}</p>
+        <div className="empty-state">
+          <p className="empty">
+            {t(hasFilters ? "app.noMatches" : "app.empty")}
+          </p>
+          {hasFilters ? (
+            <Button kind="tertiary" size="sm" onClick={clearFilters}>
+              {t("app.clearFilters")}
+            </Button>
+          ) : null}
+        </div>
       ) : viewMode === "grid" ? (
         <div className="node-grid">
           {filtered.map((node) => (
@@ -339,6 +377,7 @@ export default function Home() {
               online={onlineSet.has(node.uuid)}
               realtimeReady={realtimeReady}
               metrics={realtimeReady ? realtime[node.uuid] : undefined}
+              pingHistory={recentPingQuery.data}
               lastSeenAt={
                 realtimeReady && !onlineSet.has(node.uuid)
                   ? realtimeUpdatedAt[node.uuid] ??
@@ -356,6 +395,7 @@ export default function Home() {
           onlineIds={onlineIds}
           realtimeReady={realtimeReady}
           realtime={realtime}
+          pingHistory={recentPingQuery.data}
         />
       )}
     </div>

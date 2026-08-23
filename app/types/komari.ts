@@ -35,6 +35,7 @@ export interface NodeInfo {
   kernel_version: string;
   gpu_name: string;
   region: string;
+  remark?: string;
   mem_total: number;
   swap_total: number;
   disk_total: number;
@@ -48,6 +49,7 @@ export interface NodeInfo {
   tags: string;
   public_remark?: string;
   hidden: boolean;
+  version?: string;
   traffic_limit: number;
   traffic_limit_type: string;
   created_at: string;
@@ -61,6 +63,7 @@ export interface NodePingLive {
   name: string;
   latest: number;
   avg: number;
+  tail: number;
   loss: number;
   min: number;
   max: number;
@@ -152,6 +155,9 @@ export interface PingTaskMeta {
   total?: number;
   type?: string;
   interval?: number;
+  p50?: number;
+  p99?: number;
+  p99_p50_ratio?: number;
 }
 
 export interface PingHistoryResponse {
@@ -169,7 +175,13 @@ export interface MeInfo {
 export interface KomariDataSource {
   getPublic(signal?: AbortSignal): Promise<PublicSettings>;
   getNodes(signal?: AbortSignal): Promise<NodeInfo[]>;
+  getRealtimeSnapshot(): Promise<RealtimeSnapshot>;
   getRecent(uuid: string): Promise<RealtimeMetrics[]>;
+  getRecentLoadRecords(
+    uuid: string,
+    limit?: number,
+    signal?: AbortSignal,
+  ): Promise<LoadRecordsResponse>;
   getLoadRecords(
     uuid: string,
     hours: number,
@@ -177,6 +189,10 @@ export interface KomariDataSource {
   ): Promise<LoadRecordsResponse>;
   getPingHistory(
     uuid: string,
+    hours: number,
+    signal?: AbortSignal,
+  ): Promise<PingHistoryResponse>;
+  getRecentPingHistory(
     hours: number,
     signal?: AbortSignal,
   ): Promise<PingHistoryResponse>;

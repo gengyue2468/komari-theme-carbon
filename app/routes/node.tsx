@@ -33,18 +33,29 @@ import { QuickIcon } from "~/components/BrandIcon";
 import { PageSpinner } from "~/components/PageSpinner";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
+  calcMonthlyValueCny,
+  calcRemainingValueCny,
+  calcValueCny,
+  convertFromCny,
+  formatFinanceAmount,
+  getDailyExchangeRates,
+  getStoredFinanceCurrency,
+  DEFAULT_EXCHANGE_RATES,
+  type CurrencyCode,
+  type ExchangeRates,
+} from "~/lib/finance";
+import {
   formatBillingCycle,
   formatBytes,
   formatRate,
   formatRemainTime,
-  formatUptime,
+  formatUptimeWithFormat,
   isNeverExpire,
   parseTags,
   percentOf,
   trafficLimitTypeLabel,
   trafficUsedBytes,
 } from "~/lib/format";
-import { nodeFinance } from "~/lib/home-stats";
 import { getArchIcon, getOsIcon, getVirtIcon } from "~/lib/os-arch";
 import { useNodesStore } from "~/stores/nodes";
 import type { Route } from "./+types/node";
@@ -119,6 +130,22 @@ export default function NodeDetail() {
   const loading = useNodesStore((s) => s.loading);
   const recordEnabled =
     useNodesStore((s) => s.publicSettings?.record_enabled) !== false;
+  const [financeBase] = useState<CurrencyCode>(() =>
+    typeof window !== "undefined" ? getStoredFinanceCurrency() : "CNY",
+  );
+  const [financeRates, setFinanceRates] = useState<ExchangeRates>(
+    DEFAULT_EXCHANGE_RATES,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void getDailyExchangeRates().then((rates) => {
+      if (!cancelled) setFinanceRates(rates);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const node = useMemo(() => nodes.find((n) => n.uuid === uuid), [nodes, uuid]);
   const online = realtimeReady && onlineIds.includes(uuid);
@@ -146,12 +173,25 @@ export default function NodeDetail() {
   const trafficPct =
     metrics && hasLimit ? percentOf(trafficUsed, node.traffic_limit) : null;
 
-  const priceText =
-    node.price < 0
-      ? t("detail.free")
-      : node.price === 0
-        ? "—"
-        : `${node.currency}${node.price}`;
+  const priceCny = calcValueCny(node, financeRates);
+  const monthlyCny = calcMonthlyValueCny(node, financeRates);
+  const remainingValueCny = calcRemainingValueCny(node, financeRates);
+  const priceMetric = formatFinanceAmount(
+    convertFromCny(priceCny, financeBase, financeRates),
+    financeBase,
+    i18n.language,
+  );
+  const monthlyMetric = formatFinanceAmount(
+    convertFromCny(monthlyCny, financeBase, financeRates),
+    financeBase,
+    i18n.language,
+  );
+  const remainingMetric = formatFinanceAmount(
+    convertFromCny(remainingValueCny, financeBase, financeRates),
+    financeBase,
+    i18n.language,
+  );
+  const priceText = `${priceMetric.symbol}${priceMetric.value}`;
   const cycleText = formatBillingCycle(node.billing_cycle);
 
   const remainTimeText = formatRemainTime(node.expired_at);
@@ -159,8 +199,6 @@ export default function NodeDetail() {
     node.expired_at && !isNeverExpire(node.expired_at)
       ? new Date(node.expired_at).toLocaleDateString()
       : undefined;
-
-  const finance = nodeFinance(node);
 
   // Live metric cards: quick snapshot before finance
   const cpuPct = metrics?.cpu.usage ?? null;
@@ -185,7 +223,7 @@ export default function NodeDetail() {
     {
       key: "cpu",
       label: t("metrics.cpu"),
-      value: cpuPct != null ? `${cpuPct.toFixed(0)}%` : "—",
+       value: cpuPct != null ? `${cpuPct.toFixed(1)}%` : "—",
       icon: <Chip size={16} />,
       bar: cpuPct,
       hint: metrics
@@ -200,7 +238,7 @@ export default function NodeDetail() {
       bar: ramPct,
       hint:
         metrics && ramPct != null
-          ? `${ramPct.toFixed(0)}% / ${formatBytes(ramTotal)}`
+           ? `${ramPct.toFixed(1)}% / ${formatBytes(ramTotal)}`
           : "",
     },
     {
@@ -211,7 +249,7 @@ export default function NodeDetail() {
       bar: diskPct,
       hint:
         metrics && diskPct != null
-          ? `${diskPct.toFixed(0)}% / ${formatBytes(diskTotal)}`
+           ? `${diskPct.toFixed(1)}% / ${formatBytes(diskTotal)}`
           : "",
     },
     {
@@ -227,7 +265,7 @@ export default function NodeDetail() {
           {
             key: "gpu",
             label: t("metrics.gpu"),
-            value: gpuPct != null ? `${gpuPct.toFixed(0)}%` : "—",
+             value: gpuPct != null ? `${gpuPct.toFixed(1)}%` : "—",
             icon: <Video size={16} />,
             bar: gpuPct,
             hint: metrics?.gpu ? node.gpu_name : "",
@@ -237,10 +275,38 @@ export default function NodeDetail() {
   ];
 
   const financeCards = [
-    { key: "price", label: t("detail.nodePrice"), value: priceText, unit: cycleText || undefined, Icon: Currency },
-    { key: "monthly", label: t("stats.monthlyCost"), value: finance.monthly, Icon: Currency },
-    { key: "remain-time", label: t("detail.remainTime"), value: remainTimeText, unit: expireDateText, Icon: Calendar },
-    { key: "remain-value", label: t("stats.remaining"), value: finance.remaining, Icon: Currency },
+    {
+      key: "price",
+      label: t("detail.nodePrice"),
+      value: priceText,
+      unit: node.price > 0 ? `${priceMetric.currency} · ${cycleText}` : undefined,
+      Icon: Currency,
+    },
+    {
+      key: "monthly",
+      label: t("stats.monthlyCost"),
+      value:
+        node.billing_cycle > 0
+          ? `${monthlyMetric.symbol}${monthlyMetric.value}`
+          : t("detail.notApplicable"),
+      unit:
+        node.billing_cycle > 0 ? `${monthlyMetric.currency} / mo` : undefined,
+      Icon: Currency,
+    },
+    {
+      key: "remain-time",
+      label: t("detail.remainTime"),
+      value: remainTimeText,
+      unit: expireDateText,
+      Icon: Calendar,
+    },
+    {
+      key: "remain-value",
+      label: t("stats.remaining"),
+      value: `${remainingMetric.symbol}${remainingMetric.value}`,
+      unit: remainingMetric.currency,
+      Icon: Currency,
+    },
   ];
 
   const cpuCoresText =
@@ -287,7 +353,7 @@ export default function NodeDetail() {
     },
     {
       label: t("metrics.uptime"),
-      value: metrics ? formatUptime(metrics.uptime) : "—",
+      value: metrics ? formatUptimeWithFormat(metrics.uptime, "minute") : "—",
       icon: <Time size={16} />,
     },
     {
@@ -407,7 +473,7 @@ export default function NodeDetail() {
             {card.bar != null && (
               <div className="detail-metric-card__bar-track">
                 <div
-                  className={`detail-metric-card__bar-fill${card.bar >= 90 ? " is-warn" : ""}${card.bar >= 98 ? " is-error" : ""}`}
+                  className={`detail-metric-card__bar-fill${card.bar >= 60 ? " is-warn" : ""}${card.bar >= 80 ? " is-error" : ""}`}
                   style={{ width: `${Math.min(100, Math.max(0, card.bar))}%` }}
                 />
               </div>
@@ -495,7 +561,7 @@ export default function NodeDetail() {
                 {item.pct != null && (
                   <div className="detail-info-cell__bar-track">
                     <div
-                      className={`detail-info-cell__bar-fill${item.pct >= 90 ? " is-warn" : ""}${item.pct >= 98 ? " is-error" : ""}`}
+                      className={`detail-info-cell__bar-fill${item.pct >= 60 ? " is-warn" : ""}${item.pct >= 80 ? " is-error" : ""}`}
                       style={{ width: `${Math.min(100, Math.max(0, item.pct))}%` }}
                     />
                   </div>
@@ -510,9 +576,9 @@ export default function NodeDetail() {
           <div className="detail-network-grid">
             <div
               className={`detail-info-cell detail-info-cell--traffic${
-                trafficPct != null && trafficPct >= 90
+                trafficPct != null && trafficPct >= 80
                   ? " is-error"
-                  : trafficPct != null && trafficPct >= 75
+                  : trafficPct != null && trafficPct >= 60
                     ? " is-warn"
                     : ""
               }`}
@@ -593,7 +659,7 @@ export default function NodeDetail() {
                 </div>
                 <div className="detail-metric-card__value-row">
                   <span className="detail-metric-card__value mono">
-                    {g.utilization.toFixed(0)}%
+                     {g.utilization.toFixed(1)}%
                   </span>
                   {g.temperature > 0 ? (
                     <span className="detail-metric-card__unit mono">
@@ -605,7 +671,7 @@ export default function NodeDetail() {
                   <>
                     <div className="detail-metric-card__bar-track">
                       <div
-                        className={`detail-metric-card__bar-fill${memPct >= 90 ? " is-warn" : ""}${memPct >= 98 ? " is-error" : ""}`}
+                        className={`detail-metric-card__bar-fill${memPct >= 60 ? " is-warn" : ""}${memPct >= 80 ? " is-error" : ""}`}
                         style={{ width: `${Math.min(100, memPct)}%` }}
                       />
                     </div>

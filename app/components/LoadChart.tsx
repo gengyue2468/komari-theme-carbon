@@ -18,6 +18,7 @@ import {
 } from "~/lib/chart-i18n";
 import {
   formatBytes,
+  formatPercent,
   formatRate,
   percentOf,
 } from "~/lib/format";
@@ -36,8 +37,14 @@ interface LoadChartProps {
 interface ChartPoint {
   group: string;
   date: Date;
-  value: number;
+  value: number | null;
 }
+
+type LoadNumericKey = Exclude<keyof LoadRecord, "client" | "time">;
+type ChartLoadRecord = {
+  client: string;
+  time: string;
+} & { [K in LoadNumericKey]: number | null };
 
 const RANGES: Array<{ key: RangeKey; hours: number }> = [
   { key: "live", hours: 1 },
@@ -70,14 +77,92 @@ function writeStoredRange(range: RangeKey) {
   }
 }
 
-function downsample(records: LoadRecord[], maxPoints: number): LoadRecord[] {
+function downsample<T>(records: T[], maxPoints: number): T[] {
   if (records.length <= maxPoints) return records;
   const step = Math.ceil(records.length / maxPoints);
-  const out: LoadRecord[] = [];
+  const out: T[] = [];
   for (let i = 0; i < records.length; i += step) out.push(records[i]);
   const last = records[records.length - 1];
   if (out[out.length - 1] !== last) out.push(last);
   return out;
+}
+
+const LOAD_NUMERIC_KEYS: LoadNumericKey[] = [
+  "cpu",
+  "gpu",
+  "ram",
+  "ram_total",
+  "swap",
+  "swap_total",
+  "load",
+  "temp",
+  "disk",
+  "disk_total",
+  "net_in",
+  "net_out",
+  "net_total_up",
+  "net_total_down",
+  "traffic_up",
+  "traffic_down",
+  "process",
+  "connections",
+  "connections_udp",
+];
+
+function fillMissingLoadPoints(
+  records: LoadRecord[],
+  hours: number,
+): ChartLoadRecord[] {
+  if (!records.length) return [];
+
+  const sorted = records
+    .map((record) => ({
+      record,
+      timestamp: new Date(record.time).getTime(),
+    }))
+    .filter((item) => Number.isFinite(item.timestamp))
+    .sort((a, b) => a.timestamp - b.timestamp);
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  if (!first || !last) return [];
+
+  const intervalSeconds =
+    hours <= 4 ? 60 : hours > 120 ? 60 * 60 : 15 * 60;
+  const intervalMs = intervalSeconds * 1000;
+  const maxGapMs = intervalMs * 2;
+  const start = last.timestamp - hours * 60 * 60 * 1000 + intervalMs;
+  const points: number[] = [];
+  for (let timestamp = start; timestamp <= last.timestamp; timestamp += intervalMs) {
+    points.push(timestamp);
+  }
+
+  const emptyRecord = (): ChartLoadRecord => {
+    const empty = { client: last.record.client, time: "" } as ChartLoadRecord;
+    for (const key of LOAD_NUMERIC_KEYS) empty[key] = null;
+    return empty;
+  };
+
+  let dataIndex = 0;
+  return points.map((timestamp) => {
+    while (
+      dataIndex < sorted.length &&
+      sorted[dataIndex].timestamp < timestamp - maxGapMs
+    ) {
+      dataIndex += 1;
+    }
+
+    const current = sorted[dataIndex];
+    if (
+      current &&
+      Math.abs(current.timestamp - timestamp) <= maxGapMs
+    ) {
+      return { ...current.record, time: new Date(timestamp).toISOString() };
+    }
+
+    const empty = emptyRecord();
+    empty.time = new Date(timestamp).toISOString();
+    return empty;
+  });
 }
 
 function baseChartOptions(
@@ -286,14 +371,18 @@ export function LoadChart({ uuid }: LoadChartProps) {
   }, [availableRanges, range]);
 
   const loadQuery = useQuery({
-    queryKey: queryKeys.loadRecords(uuid, fetchHours),
+    queryKey: queryKeys.loadRecords(uuid, fetchHours, isLive ? "live" : "history"),
     queryFn: async ({ signal }) => {
-      const res = await dataSource.getLoadRecords(uuid, fetchHours, signal);
+      const res = isLive
+        ? await dataSource.getRecentLoadRecords(uuid, 150, signal)
+        : await dataSource.getLoadRecords(uuid, fetchHours, signal);
       const list = [...res.records].sort(
         (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime(),
       );
       return {
-        records: isLive ? list.slice(-120) : list,
+        records: isLive
+          ? list.slice(-150)
+          : fillMissingLoadPoints(list, fetchHours),
         hasGpu: Boolean(res.has_gpu_data),
       };
     },
@@ -306,20 +395,23 @@ export function LoadChart({ uuid }: LoadChartProps) {
 
   // Live: keep previous series while soft-refetching. History: hide data while fetching.
   const records = !isLive && loadQuery.isFetching ? [] : (loadQuery.data?.records ?? []);
-  const hasGpu = loadQuery.data?.hasGpu ?? false;
+  const hasNodeGpu = Boolean(
+    node?.gpu_name && node.gpu_name.trim() && node.gpu_name !== "None",
+  );
+  const hasGpu = loadQuery.data?.hasGpu ?? hasNodeGpu;
   const loading =
     loadQuery.isPending ||
     (!isLive && loadQuery.isFetching) ||
     (isLive && !loadQuery.data && !loadQuery.isError);
 
   const series = useMemo(() => {
-    const down = downsample(records, isLive ? 90 : 120);
+    const down = downsample(records, isLive ? 150 : 120);
     // Komari history records leave *_total as 0; fill from node info.
     return down.map((r) => ({
       ...r,
-      ram_total: r.ram_total || ramTotalFallback,
-      disk_total: r.disk_total || diskTotalFallback,
-      swap_total: r.swap_total || swapTotalFallback,
+      ram_total: r.ram == null ? null : r.ram_total || ramTotalFallback,
+      disk_total: r.disk == null ? null : r.disk_total || diskTotalFallback,
+      swap_total: r.swap == null ? null : r.swap_total || swapTotalFallback,
     }));
   }, [
     records,
@@ -337,7 +429,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
       series.map((r) => ({
         group: t("metrics.cpu"),
         date: new Date(r.time),
-        value: Number(r.cpu.toFixed(2)),
+        value: r.cpu == null ? null : Number(r.cpu.toFixed(2)),
       })),
     [series, t],
   );
@@ -347,7 +439,10 @@ export function LoadChart({ uuid }: LoadChartProps) {
       series.map((r) => ({
         group: t("metrics.ram"),
         date: new Date(r.time),
-        value: Number(percentOf(r.ram, r.ram_total).toFixed(2)),
+        value:
+          r.ram == null || r.ram_total == null
+            ? null
+            : Number(percentOf(r.ram, r.ram_total).toFixed(2)),
       })),
     [series, t],
   );
@@ -357,7 +452,10 @@ export function LoadChart({ uuid }: LoadChartProps) {
       series.map((r) => ({
         group: t("metrics.disk"),
         date: new Date(r.time),
-        value: Number(percentOf(r.disk, r.disk_total).toFixed(2)),
+        value:
+          r.disk == null || r.disk_total == null
+            ? null
+            : Number(percentOf(r.disk, r.disk_total).toFixed(2)),
       })),
     [series, t],
   );
@@ -405,14 +503,14 @@ export function LoadChart({ uuid }: LoadChartProps) {
       series.map((r) => ({
         group: t("metrics.gpu"),
         date: new Date(r.time),
-        value: Number(r.gpu.toFixed(2)),
+        value: r.gpu == null ? null : Number(r.gpu.toFixed(2)),
       })),
     [series, t],
   );
 
   const language = i18n.language;
   const pctFormatter = useMemo(
-    () => makeTooltipValueFormatter(language, (v) => `${v}%`),
+    () => makeTooltipValueFormatter(language, (v) => formatPercent(v)),
     [language],
   );
   const rateFormatter = useMemo(
@@ -590,15 +688,15 @@ export function LoadChart({ uuid }: LoadChartProps) {
   const metricCharts: Partial<Record<MetricId, MetricChartData>> = {
     cpu: {
       title: t("metrics.cpu"),
-      meta: latest ? `${latest.cpu.toFixed(1)}%` : undefined,
+      meta: latest?.cpu != null ? `${latest.cpu.toFixed(1)}%` : undefined,
       data: cpuData,
       options: cpuOpts,
       kind: "area",
     },
     ram: {
       title: t("metrics.ram"),
-      meta: latest
-        ? `${formatBytes(latest.ram)} · ${formatBytes(latest.ram_total)}`
+      meta: latest?.ram != null
+        ? `${formatBytes(latest.ram)} · ${formatBytes(latest.ram_total ?? 0)}`
         : undefined,
       data: ramData,
       options: ramOpts,
@@ -606,8 +704,8 @@ export function LoadChart({ uuid }: LoadChartProps) {
     },
     disk: {
       title: t("metrics.disk"),
-      meta: latest
-        ? `${formatBytes(latest.disk)} · ${formatBytes(latest.disk_total)}`
+      meta: latest?.disk != null
+        ? `${formatBytes(latest.disk)} · ${formatBytes(latest.disk_total ?? 0)}`
         : undefined,
       data: diskData,
       options: diskOpts,
@@ -615,7 +713,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
     },
     network: {
       title: t("metrics.network"),
-      meta: latest
+      meta: latest?.net_out != null && latest.net_in != null
         ? `${formatRate(latest.net_out)} ↑ · ${formatRate(latest.net_in)} ↓`
         : undefined,
       data: netData,
@@ -624,7 +722,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
     },
     connections: {
       title: t("metrics.connections"),
-      meta: latest
+      meta: latest?.connections != null && latest.connections_udp != null
         ? `TCP ${latest.connections} · UDP ${latest.connections_udp}`
         : undefined,
       data: connData,
@@ -633,7 +731,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
     },
     process: {
       title: t("metrics.process"),
-      meta: latest ? String(Math.round(latest.process)) : undefined,
+      meta: latest?.process != null ? String(Math.round(latest.process)) : undefined,
       data: procData,
       options: procOpts,
       kind: "area",
@@ -642,8 +740,8 @@ export function LoadChart({ uuid }: LoadChartProps) {
     ...(hasGpu
       ? {
           gpu: {
-            title: t("metrics.gpu"),
-            meta: latest ? `${latest.gpu.toFixed(1)}%` : undefined,
+      title: t("metrics.gpu"),
+            meta: latest?.gpu != null ? `${latest.gpu.toFixed(1)}%` : undefined,
             data: gpuData,
             options: gpuOpts,
             kind: "area",

@@ -4,6 +4,8 @@ import type {
   MeInfo,
   PingHistoryResponse,
   PublicSettings,
+  RealtimeMetrics,
+  RealtimeSnapshot,
 } from "~/types/komari";
 import {
   getRpc,
@@ -17,24 +19,66 @@ import {
 } from "~/api/rpc";
 import {
   mapClientsToNodes,
+  mapClientToNodeInfo,
   mapStatusRecordToLoad,
   mapStatusToMetrics,
   mapStatusesToSnapshot,
 } from "~/api/mappers";
 import type { LoadRecord, PingHistoryRecord, PingTaskMeta } from "~/types/komari";
+import type { RpcClientInfo } from "~/api/rpc";
 
 function apiRoot(): string {
   const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
   return base.replace(/\/$/, "") || "/api";
 }
 
+async function fetchRest(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = 30_000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const outerSignal = init.signal;
+  const onAbort = () => controller.abort();
+  if (outerSignal) {
+    if (outerSignal.aborted) controller.abort();
+    else outerSignal.addEventListener("abort", onAbort, { once: true });
+  }
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+    outerSignal?.removeEventListener("abort", onAbort);
+  }
+}
+
+async function readJsonResponse<T>(res: Response, endpoint: string): Promise<T> {
+  const body = await res.text();
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.toLowerCase().includes("json")) {
+    const isAnubis = /anubis|making sure you're not a bot/i.test(body);
+    throw new Error(
+      `${endpoint} returned ${isAnubis ? "an Anubis challenge page" : "HTML"} instead of JSON`,
+    );
+  }
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    throw new Error(`${endpoint} returned invalid JSON`);
+  }
+}
+
 async function restPublic(signal?: AbortSignal): Promise<PublicSettings> {
-  const res = await fetch(`${apiRoot()}/public`, {
+  const res = await fetchRest(`${apiRoot()}/public`, {
     credentials: "include",
     signal,
   });
   if (!res.ok) throw new Error(`public ${res.status}`);
-  const json = (await res.json()) as { status?: string; data: PublicSettings };
+  const json = await readJsonResponse<{
+    status?: string;
+    data: PublicSettings;
+  }>(res, `${apiRoot()}/public`);
   if (json.status && json.status !== "success") {
     throw new Error("Failed to load public settings");
   }
@@ -46,7 +90,7 @@ async function restPublic(signal?: AbortSignal): Promise<PublicSettings> {
 
 async function restMe(): Promise<MeInfo> {
   try {
-    const res = await fetch(`${apiRoot()}/me`, { credentials: "include" });
+    const res = await fetchRest(`${apiRoot()}/me`, { credentials: "include" });
     if (!res.ok) return { logged_in: false };
     return (await res.json()) as MeInfo;
   } catch {
@@ -54,23 +98,193 @@ async function restMe(): Promise<MeInfo> {
   }
 }
 
+async function restNodes(signal?: AbortSignal) {
+  const res = await fetchRest(`${apiRoot()}/nodes`, {
+    credentials: "include",
+    signal,
+  });
+  if (!res.ok) throw new Error(`nodes ${res.status}`);
+  const json = await readJsonResponse<{
+    status?: string;
+    data?: RpcClientInfo[] | Record<string, RpcClientInfo>;
+  }>(res, `${apiRoot()}/nodes`);
+  if (json.status && json.status !== "success") {
+    throw new Error("Failed to load nodes");
+  }
+  const data = json.data;
+  const clients = Array.isArray(data) ? data : Object.values(data ?? {});
+  return mapClientsToNodes(
+    Object.fromEntries(clients.map((client) => [client.uuid, client])),
+  );
+}
+
+async function restRecent(
+  uuid: string,
+  signal?: AbortSignal,
+): Promise<Array<Partial<RealtimeMetrics>>> {
+  const res = await fetchRest(`${apiRoot()}/recent/${encodeURIComponent(uuid)}`, {
+    credentials: "include",
+    signal,
+  });
+  if (!res.ok) throw new Error(`recent ${res.status}`);
+  const json = await readJsonResponse<{
+    status?: string;
+    data?: Array<Partial<RealtimeMetrics>>;
+  }>(res, `${apiRoot()}/recent/${encodeURIComponent(uuid)}`);
+  if (json.status && json.status !== "success") {
+    throw new Error("Failed to load recent status");
+  }
+  return json.data ?? [];
+}
+
+function numberOrZero(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeRestMetrics(
+  raw: Partial<RealtimeMetrics>,
+  fallbackTime = new Date().toISOString(),
+): RealtimeMetrics {
+  const gpu = raw.gpu;
+  return {
+    cpu: { usage: numberOrZero(raw.cpu?.usage) },
+    gpu: gpu
+      ? {
+          count: numberOrZero(gpu.count),
+          average_usage: numberOrZero(gpu.average_usage),
+          detailed_info: (gpu.detailed_info ?? []).map((device) => ({
+            name: device.name || "",
+            memory_total: numberOrZero(device.memory_total),
+            memory_used: numberOrZero(device.memory_used),
+            utilization: numberOrZero(device.utilization),
+            temperature: numberOrZero(device.temperature),
+          })),
+        }
+      : undefined,
+    temp: raw.temp == null ? undefined : numberOrZero(raw.temp),
+    ram: {
+      total: numberOrZero(raw.ram?.total),
+      used: numberOrZero(raw.ram?.used),
+    },
+    swap: {
+      total: numberOrZero(raw.swap?.total),
+      used: numberOrZero(raw.swap?.used),
+    },
+    load: {
+      load1: numberOrZero(raw.load?.load1),
+      load5: numberOrZero(raw.load?.load5),
+      load15: numberOrZero(raw.load?.load15),
+    },
+    disk: {
+      total: numberOrZero(raw.disk?.total),
+      used: numberOrZero(raw.disk?.used),
+    },
+    network: {
+      up: numberOrZero(raw.network?.up),
+      down: numberOrZero(raw.network?.down),
+      totalUp: numberOrZero(raw.network?.totalUp),
+      totalDown: numberOrZero(raw.network?.totalDown),
+    },
+    connections: {
+      tcp: numberOrZero(raw.connections?.tcp),
+      udp: numberOrZero(raw.connections?.udp),
+    },
+    uptime: numberOrZero(raw.uptime),
+    process: numberOrZero(raw.process),
+    message: raw.message || "",
+    updated_at: raw.updated_at || fallbackTime,
+    ping: raw.ping,
+  };
+}
+
+function metricsToLoadRecord(uuid: string, metrics: RealtimeMetrics): LoadRecord {
+  return {
+    client: uuid,
+    time: metrics.updated_at,
+    cpu: metrics.cpu.usage,
+    gpu: metrics.gpu?.average_usage ?? 0,
+    ram: metrics.ram.used,
+    ram_total: metrics.ram.total,
+    swap: metrics.swap.used,
+    swap_total: metrics.swap.total,
+    load: metrics.load.load1,
+    temp: metrics.temp ?? 0,
+    disk: metrics.disk.used,
+    disk_total: metrics.disk.total,
+    net_in: metrics.network.down,
+    net_out: metrics.network.up,
+    net_total_up: metrics.network.totalUp,
+    net_total_down: metrics.network.totalDown,
+    traffic_up: metrics.network.totalUp,
+    traffic_down: metrics.network.totalDown,
+    process: metrics.process,
+    connections: metrics.connections.tcp,
+    connections_udp: metrics.connections.udp,
+  };
+}
+
+async function restRealtimeSnapshot(): Promise<RealtimeSnapshot> {
+  const nodes = await restNodes();
+  const latestByNode = await Promise.all(
+    nodes.map(async (node) => {
+      try {
+        const records = await restRecent(node.uuid);
+        const latest = records.reduce<Partial<RealtimeMetrics> | undefined>(
+          (current, candidate) => {
+            if (!current) return candidate;
+            const currentTime = Date.parse(current.updated_at || "");
+            const candidateTime = Date.parse(candidate.updated_at || "");
+            return candidateTime >= currentTime ? candidate : current;
+          },
+          undefined,
+        );
+        return [node.uuid, latest, undefined] as const;
+      } catch (e) {
+        return [node.uuid, undefined, e] as const;
+      }
+    }),
+  );
+
+  const failed = latestByNode.filter(([, , error]) => error != null);
+  if (failed.length === nodes.length && failed[0]?.[2]) {
+    throw failed[0][2];
+  }
+
+  const online: string[] = [];
+  const data: Record<string, RealtimeMetrics> = {};
+  const updatedAt: Record<string, string> = {};
+  for (const [uuid, raw] of latestByNode) {
+    if (!raw) continue;
+    const metrics = normalizeRestMetrics(raw);
+    online.push(uuid);
+    data[uuid] = metrics;
+    updatedAt[uuid] = metrics.updated_at;
+  }
+  return { online, data, updatedAt };
+}
+
 async function restLoadRecords(
   uuid: string,
   hours: number,
   signal?: AbortSignal,
 ): Promise<LoadRecordsResponse> {
-  const res = await fetch(
+  const res = await fetchRest(
     `${apiRoot()}/records/load?uuid=${encodeURIComponent(uuid)}&hours=${hours}`,
     { credentials: "include", signal },
   );
   if (!res.ok) throw new Error(`load records ${res.status}`);
-  const json = (await res.json()) as {
-    data: {
+  const json = await readJsonResponse<{
+    status?: string;
+    data?: {
       count?: number;
       has_gpu_data?: boolean;
       records?: LoadRecord[] | Record<string, LoadRecord[]>;
     };
-  };
+  }>(res, `${apiRoot()}/records/load`);
+  if (json.status && json.status !== "success") {
+    throw new Error("Failed to load load records");
+  }
   const raw = json.data?.records;
   const list = normalizeRecordList(raw, uuid);
   return {
@@ -81,27 +295,66 @@ async function restLoadRecords(
 }
 
 async function restPingRecords(
-  uuid: string,
+  uuid: string | undefined,
   hours: number,
   signal?: AbortSignal,
 ): Promise<PingHistoryResponse> {
-  const res = await fetch(
-    `${apiRoot()}/records/ping?uuid=${encodeURIComponent(uuid)}&hours=${hours}`,
+  const res = await fetchRest(
+    `${apiRoot()}/records/ping?${uuid ? `uuid=${encodeURIComponent(uuid)}&` : ""}hours=${hours}`,
     { credentials: "include", signal },
   );
   if (!res.ok) throw new Error(`ping records ${res.status}`);
-  const json = (await res.json()) as {
-    data: {
+  const json = await readJsonResponse<{
+    status?: string;
+    data?: {
       count?: number;
       records?: PingHistoryRecord[] | Record<string, PingHistoryRecord[]>;
       tasks?: PingTaskMeta[];
     };
-  };
+  }>(res, `${apiRoot()}/records/ping`);
+  if (json.status && json.status !== "success") {
+    throw new Error("Failed to load ping records");
+  }
   const list = normalizeRecordList(json.data?.records, uuid);
   return {
     count: json.data?.count ?? list.length,
     records: list,
     tasks: json.data?.tasks ?? [],
+  };
+}
+
+async function rpcLegacyPingHistory(
+  uuid: string | undefined,
+  hours: number,
+  signal?: AbortSignal,
+): Promise<PingHistoryResponse> {
+  const res = await rpcGetPingRecords(uuid, hours, signal);
+  const records = uuid
+    ? (res.records ?? []).filter((record) => record.client === uuid)
+    : res.records ?? [];
+  return {
+    count: records.length,
+    records: records.map((r) => ({
+      task_id: r.task_id,
+      time: r.time,
+      value: r.value,
+      client: r.client ?? uuid,
+    })),
+    tasks: (res.tasks ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      loss: t.loss,
+      min: t.min,
+      max: t.max,
+      avg: t.avg,
+      latest: t.latest,
+      total: t.total,
+      type: t.type,
+      interval: t.interval,
+      p50: t.p50,
+      p99: t.p99,
+      p99_p50_ratio: t.p99_p50_ratio,
+    })),
   };
 }
 
@@ -118,22 +371,66 @@ function createRpcDataSource(): KomariDataSource {
       } catch (e) {
         if (e instanceof RpcError && e.code === 401) {
           window.location.href = "/admin";
+          throw e;
         }
-        throw e;
+        if (signal?.aborted) throw e;
+        return restNodes(signal);
+      }
+    },
+
+    async getRealtimeSnapshot() {
+      try {
+        return mapStatusesToSnapshot(await rpcGetNodesLatestStatus());
+      } catch (e) {
+        if (e instanceof RpcError && e.code === 401) {
+          window.location.href = "/admin";
+          throw e;
+        }
+        return restRealtimeSnapshot();
+      }
+    },
+
+    async getRecentLoadRecords(uuid, limit = 150, signal) {
+      try {
+        const res = await rpcGetNodeRecentStatus(uuid, limit, signal);
+        if (signal?.aborted) throw new RpcError(-32000, "Request aborted");
+        const records = (res.records ?? []).map(mapStatusRecordToLoad);
+        return {
+          count: res.count ?? records.length,
+          records,
+          has_gpu_data:
+            records.some((record) => record.gpu !== 0) || undefined,
+        };
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        const records = (await restRecent(uuid)).map((record) =>
+          metricsToLoadRecord(uuid, normalizeRestMetrics(record)),
+        );
+        return {
+          count: records.length,
+          records,
+          has_gpu_data:
+            records.some((record) => record.gpu !== 0) || undefined,
+        };
       }
     },
 
     async getRecent(uuid) {
-      const res = await rpcGetNodeRecentStatus(uuid);
-      return (res.records ?? []).map((r) =>
-        mapStatusToMetrics({
-          ...r,
-          online: true,
-          uptime: 0,
-          load5: r.load5,
-          load15: r.load15,
-        }),
-      );
+      try {
+        const res = await rpcGetNodeRecentStatus(uuid);
+        return (res.records ?? []).map((r) =>
+          mapStatusToMetrics({
+            ...r,
+            online: true,
+            uptime: 0,
+            load5: r.load5,
+            load15: r.load15,
+          }),
+        );
+      } catch {
+        const records = await restRecent(uuid);
+        return records.map((record) => normalizeRestMetrics(record));
+      }
     },
 
     async getLoadRecords(uuid, hours, signal) {
@@ -144,7 +441,8 @@ function createRpcDataSource(): KomariDataSource {
           count: res.count ?? records.length,
           records,
           has_gpu_data:
-            res.has_gpu_data ?? records.some((record) => record.gpu !== 0),
+            res.has_gpu_data ??
+            (records.some((record) => record.gpu !== 0) ? true : undefined),
         };
       } catch (e) {
         if (signal?.aborted) throw e;
@@ -154,36 +452,19 @@ function createRpcDataSource(): KomariDataSource {
 
     async getPingHistory(uuid, hours, signal) {
       try {
-        const res = await rpcGetPingRecords(uuid, hours, signal);
-        return {
-          count: res.count ?? res.records?.length ?? 0,
-          records: (res.records ?? []).map((r) => ({
-            task_id: r.task_id,
-            time: r.time,
-            value: r.value,
-            client: r.client,
-          })),
-          tasks: (res.tasks ?? []).map((t) => ({
-            id: t.id,
-            name: t.name,
-            loss: t.loss,
-            min: t.min,
-            max: t.max,
-            avg: t.avg,
-            latest: t.latest,
-            total: t.total,
-            type: t.type,
-            interval: t.interval,
-          })),
-        } satisfies PingHistoryResponse;
+        return await rpcLegacyPingHistory(uuid, hours, signal);
       } catch (e) {
         if (signal?.aborted) throw e;
-        try {
-          return await restPingRecords(uuid, hours, signal);
-        } catch (err) {
-          if (signal?.aborted) throw err;
-          throw err;
-        }
+        return restPingRecords(uuid, hours, signal);
+      }
+    },
+
+    async getRecentPingHistory(hours, signal) {
+      try {
+        return await rpcLegacyPingHistory(undefined, hours, signal);
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        return restPingRecords(undefined, hours, signal);
       }
     },
 
@@ -227,7 +508,28 @@ function createRpcDataSource(): KomariDataSource {
             window.location.href = "/admin";
             return;
           }
-          if (failCount >= 2) rpc.setTransport(false);
+          if (rpc.isUsingWebSocket() && failCount < 5) {
+            return;
+          }
+          if (rpc.isUsingWebSocket()) {
+            rpc.setTransport(false);
+          }
+          try {
+            const statuses = await rpcGetNodesLatestStatus();
+            if (stopped) return;
+            cb(mapStatusesToSnapshot(statuses));
+            failCount = 0;
+            return;
+          } catch {
+            try {
+              const fallback = await restRealtimeSnapshot();
+              if (stopped) return;
+              cb(fallback);
+              failCount = 0;
+            } catch {
+              // Preserve the last good snapshot instead of publishing false offline states.
+            }
+          }
         } finally {
           inFlight = false;
         }
@@ -235,10 +537,7 @@ function createRpcDataSource(): KomariDataSource {
 
       const schedule = () => {
         if (stopped || document.visibilityState === "hidden") return;
-        const delay = Math.min(
-          60_000,
-          intervalMs * 2 ** Math.min(Math.max(failCount - 1, 0), 4),
-        );
+        const delay = failCount > 0 ? 3_000 : intervalMs;
         clearTimer();
         timer = window.setTimeout(() => {
           timer = null;

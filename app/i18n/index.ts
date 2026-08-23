@@ -25,6 +25,7 @@ void i18n.use(initReactI18next).init({
   lng: detectLanguage(),
   fallbackLng: "en",
   interpolation: { escapeValue: false },
+  react: { useSuspense: false },
 });
 
 // Do not touch document.lang during module init (causes hydration mismatch).

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { dataSource } from "~/api/datasource";
-import { getRpc } from "~/api/rpc";
+import { getRpc, rpcPing, RpcError } from "~/api/rpc";
 import { asNumber } from "~/lib/format";
 import type {
   NodeInfo,
@@ -38,7 +38,7 @@ function nodesFingerprint(nodes: NodeInfo[]): string {
   return nodes
     .map(
       (n) =>
-        `${n.uuid}:${n.weight}:${n.name}:${n.group}:${n.tags}:${n.updated_at}`,
+        `${n.uuid}:${n.weight}:${n.name}:${n.group}:${n.tags}:${n.remark ?? ""}:${n.version ?? ""}:${n.updated_at}`,
     )
     .join("|");
 }
@@ -102,11 +102,37 @@ export const useNodesStore = create<NodesState>((set, get) => ({
       unsubscribe: null,
     });
     try {
-      // Parallel: public settings + node list (one less RTT than sequential)
-      const [publicSettings, nodes] = await Promise.all([
-        dataSource.getPublic(controller.signal),
-        dataSource.getNodes(controller.signal),
-      ]);
+      const previousMode = get().publicSettings?.theme_settings.rpcTransportMode;
+      getRpc().setTransport(previousMode === "websocket");
+
+      // Match Emerald's startup contract: verify RPC before loading the page.
+      try {
+        const response = await rpcPing();
+        if (response !== "pong") {
+          throw new Error("Unexpected health check response");
+        }
+      } catch (e) {
+        if (
+          (e instanceof RpcError && e.code === 401) ||
+          (e instanceof Error && /401|unauthorized|private/i.test(e.message))
+        ) {
+          window.location.href = "/admin";
+        }
+        throw e;
+      }
+
+      // Public settings and login state are non-critical for the node list.
+      let publicSettings: PublicSettings | null = null;
+      try {
+        publicSettings = await dataSource.getPublic(controller.signal);
+      } catch (e) {
+        if (controller.signal.aborted) throw e;
+      }
+      try {
+        await dataSource.getMe();
+      } catch {
+        // Login state is not required to render public node data.
+      }
 
       if (
         controller.signal.aborted ||
@@ -115,14 +141,13 @@ export const useNodesStore = create<NodesState>((set, get) => ({
         return;
       }
 
-      const settings = (publicSettings.theme_settings ?? {}) as Record<
+      const settings = (publicSettings?.theme_settings ?? {}) as Record<
         string,
         unknown
       >;
 
       const mode = settings.rpcTransportMode;
-      if (mode === "http" || import.meta.env.DEV) getRpc().setTransport(false);
-      else if (mode === "websocket") getRpc().setTransport(true);
+      getRpc().setTransport(mode === "http" ? false : true);
 
       const pollIntervalMs =
         asNumber(settings.dataUpdateInterval, 3, 1, 60) * 1000;
@@ -134,10 +159,18 @@ export const useNodesStore = create<NodesState>((set, get) => ({
       const chartHours = asNumber(settings.defaultChartHours, 4, 1, 168);
       const density = resolveDensity(settings);
 
-      // Paint list ASAP; realtime fills in right after
+      const [nodes, snapshot] = await Promise.all([
+        dataSource.getNodes(),
+        dataSource.getRealtimeSnapshot(),
+      ]);
+
       set({
         publicSettings,
         nodes,
+        onlineIds: snapshot.online,
+        realtime: snapshot.data,
+        realtimeUpdatedAt: snapshot.updatedAt,
+        realtimeReady: true,
         viewMode,
         showUptime,
         chartHours,
@@ -238,7 +271,7 @@ export const useNodesStore = create<NodesState>((set, get) => ({
 
       nodeTimer = window.setInterval(() => {
         refreshNodes();
-      }, Math.max(pollIntervalMs * 20, 60_000));
+      }, pollIntervalMs);
 
       set({
         unsubscribe: () => {

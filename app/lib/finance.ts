@@ -1,4 +1,5 @@
-import { billingCycleMonths, isNeverExpire } from "~/lib/format";
+import { formatBillingCycle } from "~/lib/format";
+import i18n from "~/i18n";
 import type { NodeInfo } from "~/types/komari";
 
 const FINANCE_CURRENCY_CONFIG = {
@@ -14,15 +15,19 @@ const FINANCE_CURRENCY_CONFIG = {
   HKD: { rate: 1.1594, symbol: "$" },
   HUF: { rate: 44.688, symbol: "Ft" },
   IDR: { rate: 2622.37, symbol: "Rp" },
+  ILS: { rate: 0.43085, symbol: "₪" },
   INR: { rate: 14.0178, symbol: "₹" },
+  ISK: { rate: 18.4626, symbol: "kr" },
   JPY: { rate: 23.707, symbol: "¥" },
   KRW: { rate: 224.11, symbol: "₩" },
   KZT: { rate: 64, symbol: "₸" },
+  MXN: { rate: 2.5472, symbol: "Mex$" },
   MYR: { rate: 0.59945, symbol: "RM" },
   NOK: { rate: 1.4096, symbol: "kr" },
   NZD: { rate: 0.2535, symbol: "NZ$" },
   PHP: { rate: 8.9288, symbol: "₱" },
   PLN: { rate: 0.54138, symbol: "zł" },
+  RON: { rate: 0.66769, symbol: "lei" },
   RUB: { rate: 11.9, symbol: "₽" },
   SEK: { rate: 1.3895, symbol: "kr" },
   SGD: { rate: 0.18975, symbol: "S$" },
@@ -46,14 +51,28 @@ export const DISPLAY_CURRENCIES = [
   "HKD",
   "KRW",
   "RUB",
-  "SGD",
+  "BRL",
+  "INR",
   "AUD",
   "CAD",
-  "CHF",
+  "SGD",
   "THB",
   "VND",
   "MYR",
-  "INR",
+  "PHP",
+  "IDR",
+  "NZD",
+  "SEK",
+  "NOK",
+  "DKK",
+  "PLN",
+  "CZK",
+  "HUF",
+  "TRY",
+  "ZAR",
+  "KZT",
+  "UAH",
+  "CHF",
 ] as const satisfies readonly CurrencyCode[];
 
 export const DEFAULT_EXCHANGE_RATES = Object.fromEntries(
@@ -64,14 +83,39 @@ export const CURRENCY_SYMBOLS = Object.fromEntries(
   Object.entries(FINANCE_CURRENCY_CONFIG).map(([c, cfg]) => [c, cfg.symbol]),
 ) as Record<CurrencyCode, string>;
 
-const CACHE_KEY = "komari_finance_rates_cny_v1";
+const CACHE_KEY = "komari_finance_exchange_rates_cny_v1";
 const MS_DAY = 86_400_000;
 const FIN_CURRENCY_KEY = "fin_currency";
 
 const ALIASES: Record<string, CurrencyCode> = {
   $: "USD",
+  "A$": "AUD",
+  "AU$": "AUD",
+  "C$": "CAD",
+  "CA$": "CAD",
+  "CN¥": "CNY",
+  "HK$": "HKD",
+  "JP¥": "JPY",
+  "NZ$": "NZD",
+  "R$": "BRL",
+  "S$": "SGD",
   US$: "USD",
   RMB: "CNY",
+  RM: "MYR",
+  RP: "IDR",
+  "₽": "RUB",
+  "₩": "KRW",
+  "₸": "KZT",
+  "₱": "PHP",
+  "₺": "TRY",
+  "₴": "UAH",
+  "₫": "VND",
+  "₹": "INR",
+  "฿": "THB",
+  "KČ": "CZK",
+  FT: "HUF",
+  "ZŁ": "PLN",
+  R: "ZAR",
   "￥": "CNY",
   "¥": "CNY",
   "€": "EUR",
@@ -82,6 +126,17 @@ export function normalizeCurrency(currency?: string | null): CurrencyCode {
   const v = String(currency || "CNY").trim().toUpperCase();
   if (v in FINANCE_CURRENCY_CONFIG) return v as CurrencyCode;
   return ALIASES[v] || ALIASES[String(currency || "").trim()] || "CNY";
+}
+
+export function formatPriceWithCycle(
+  price: number,
+  billingCycle: number,
+  currency = "CNY",
+): string {
+  if (price <= 0) return i18n.t("detail.free");
+  const code = normalizeCurrency(currency);
+  const cycle = formatBillingCycle(billingCycle);
+  return `${CURRENCY_SYMBOLS[code]}${price}/${cycle}`;
 }
 
 export function getStoredFinanceCurrency(): CurrencyCode {
@@ -109,21 +164,53 @@ function priceToCny(node: NodeInfo, rates: ExchangeRates): number {
   return price / rate;
 }
 
+export function calcValueCny(node: NodeInfo, rates: ExchangeRates): number {
+  return priceToCny(node, rates);
+}
+
+export function calcMonthlyValueCny(
+  node: NodeInfo,
+  rates: ExchangeRates,
+): number {
+  const price = priceToCny(node, rates);
+  const cycle = Number(node.billing_cycle);
+  if (price <= 0 || !Number.isFinite(cycle) || cycle <= 0) return 0;
+  return (price / cycle) * 30;
+}
+
+export function calcRemainingValueCny(
+  node: NodeInfo,
+  rates: ExchangeRates,
+  now = new Date(),
+): number {
+  if (!node.expired_at) return 0;
+  const price = priceToCny(node, rates);
+  if (price <= 0) return 0;
+  const exp = new Date(node.expired_at).getTime();
+  if (!Number.isFinite(exp)) return 0;
+  const diff = exp - now.getTime();
+  if (diff / (MS_DAY * 365) > 100) return price;
+  const cycle = Number(node.billing_cycle);
+  const cycleMs = cycle * MS_DAY;
+  return diff > 0 && cycleMs > 0 ? price * (diff / cycleMs) : 0;
+}
+
 export function calcTotalValueCny(
   nodes: NodeInfo[],
   rates: ExchangeRates,
 ): number {
-  return nodes.reduce((sum, n) => sum + priceToCny(n, rates), 0);
+  return nodes.reduce(
+    (sum, n) => (n.tags?.includes("白嫖中") ? sum : sum + priceToCny(n, rates)),
+    0,
+  );
 }
 
 export function calcMonthlyCny(nodes: NodeInfo[], rates: ExchangeRates): number {
-  return nodes.reduce((sum, n) => {
-    const p = priceToCny(n, rates);
-    if (p <= 0) return sum;
-    const months = billingCycleMonths(Number(n.billing_cycle));
-    if (months <= 0) return sum;
-    return sum + p / months;
-  }, 0);
+  return nodes.reduce(
+    (sum, n) =>
+      n.tags?.includes("白嫖中") ? sum : sum + calcMonthlyValueCny(n, rates),
+    0,
+  );
 }
 
 export function calcRemainingCny(
@@ -131,18 +218,13 @@ export function calcRemainingCny(
   rates: ExchangeRates,
   now = new Date(),
 ): number {
-  return nodes.reduce((sum, n) => {
-    if (isNeverExpire(n.expired_at)) return sum;
-    const p = priceToCny(n, rates);
-    if (p <= 0) return sum;
-    const exp = new Date(n.expired_at!).getTime();
-    if (!Number.isFinite(exp)) return sum;
-    const diff = exp - now.getTime();
-    const cycle = Number(n.billing_cycle);
-    const cycleMs = cycle * MS_DAY;
-    if (diff > 0 && cycleMs > 0) return sum + p * (diff / cycleMs);
-    return sum;
-  }, 0);
+  return nodes.reduce(
+    (sum, n) =>
+      n.tags?.includes("白嫖中")
+        ? sum
+        : sum + calcRemainingValueCny(n, rates, now),
+    0,
+  );
 }
 
 export function formatFinanceAmount(
@@ -178,11 +260,21 @@ function todayKey() {
 }
 
 function readCache(): ExchangeRates | null {
+  return readCacheValue(false);
+}
+
+function readCacheValue(allowStale: boolean): ExchangeRates | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
-    const j = JSON.parse(raw) as { date: string; rates: Partial<ExchangeRates> };
-    if (j.date !== todayKey()) return null;
+    const j = JSON.parse(raw) as {
+      base?: string;
+      date?: string;
+      rates: Partial<ExchangeRates>;
+    };
+    if (j.base !== "CNY" || !j.date || (!allowStale && j.date !== todayKey())) {
+      return null;
+    }
     return { ...DEFAULT_EXCHANGE_RATES, ...j.rates };
   } catch {
     return null;
@@ -193,7 +285,12 @@ function writeCache(rates: ExchangeRates) {
   try {
     localStorage.setItem(
       CACHE_KEY,
-      JSON.stringify({ date: todayKey(), rates }),
+      JSON.stringify({
+        base: "CNY",
+        date: todayKey(),
+        fetchedAt: Date.now(),
+        rates,
+      }),
     );
   } catch {
     // ignore
@@ -214,7 +311,7 @@ async function fetchRates(): Promise<ExchangeRates | null> {
   for (const url of apis) {
     try {
       const ctrl = new AbortController();
-      const t = window.setTimeout(() => ctrl.abort(), 4000);
+      const t = window.setTimeout(() => ctrl.abort(), 5000);
       const res = await fetch(url, { signal: ctrl.signal });
       window.clearTimeout(t);
       if (!res.ok) continue;
@@ -222,7 +319,12 @@ async function fetchRates(): Promise<ExchangeRates | null> {
       if (!data.rates) continue;
       const next = { ...DEFAULT_EXCHANGE_RATES };
       for (const code of Object.keys(FINANCE_CURRENCY_CONFIG) as CurrencyCode[]) {
-        if (typeof data.rates[code] === "number") next[code] = data.rates[code];
+        if (code === "CNY") continue;
+        const value = Number(data.rates[code]);
+        if (!Number.isFinite(value) || value <= 0) {
+          throw new Error(`Missing exchange rate: ${code}`);
+        }
+        next[code] = value;
       }
       next.CNY = 1;
       return next;
@@ -235,13 +337,14 @@ async function fetchRates(): Promise<ExchangeRates | null> {
 
 export async function getDailyExchangeRates(): Promise<ExchangeRates> {
   const cached = readCache();
+  const staleCached = cached ?? readCacheValue(true);
   if (cached) return cached;
   const fetched = await fetchRates();
   if (fetched) {
     writeCache(fetched);
     return fetched;
   }
-  return DEFAULT_EXCHANGE_RATES;
+  return staleCached ?? DEFAULT_EXCHANGE_RATES;
 }
 
 export interface FinanceSummary {

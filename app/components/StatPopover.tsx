@@ -23,6 +23,7 @@ interface BreakdownRow {
   value: string;
   detail: string;
   pct: number;
+  sortValue: number;
 }
 
 function ramBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetrics>): BreakdownRow[] {
@@ -35,11 +36,12 @@ function ramBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetric
       return {
         name: n.name,
         value: formatBytes(used),
-        detail: total > 0 ? `${percentOf(used, total).toFixed(0)}% / ${formatBytes(total)}` : "",
+        detail: total > 0 ? `${percentOf(used, total).toFixed(1)}% / ${formatBytes(total)}` : "",
         pct: total > 0 ? percentOf(used, total) : 0,
+        sortValue: total > 0 ? percentOf(used, total) : 0,
       };
     })
-    .sort((a, b) => b.pct - a.pct)
+    .sort((a, b) => b.sortValue - a.sortValue)
     .slice(0, 12);
 }
 
@@ -53,11 +55,12 @@ function diskBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetri
       return {
         name: n.name,
         value: formatBytes(used),
-        detail: total > 0 ? `${percentOf(used, total).toFixed(0)}% / ${formatBytes(total)}` : "",
+        detail: total > 0 ? `${percentOf(used, total).toFixed(1)}% / ${formatBytes(total)}` : "",
         pct: total > 0 ? percentOf(used, total) : 0,
+        sortValue: total > 0 ? percentOf(used, total) : 0,
       };
     })
-    .sort((a, b) => b.pct - a.pct)
+    .sort((a, b) => b.sortValue - a.sortValue)
     .slice(0, 12);
 }
 
@@ -68,15 +71,17 @@ function trafficBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMe
       const m = realtime[n.uuid];
       const up = m.network.totalUp;
       const down = m.network.totalDown;
+      const used = trafficUsedBytes(up, down, n.traffic_limit_type);
       return {
         name: n.name,
         // Respect each node's traffic_limit_type: sum (双向), max (取大), up (出站), down.
-        value: formatBytes(trafficUsedBytes(up, down, n.traffic_limit_type)),
+        value: formatBytes(used),
         detail: `↑ ${formatBytes(up)} · ↓ ${formatBytes(down)}`,
         pct: 0,
+        sortValue: used,
       };
     })
-    .sort((a, b) => b.value.localeCompare(a.value, undefined, { numeric: true }))
+    .sort((a, b) => b.sortValue - a.sortValue)
     .slice(0, 12);
 }
 
@@ -92,6 +97,7 @@ function rateBreakdown(
     .filter((n) => realtime[n.uuid])
     .map((n) => {
       const m = realtime[n.uuid];
+      const sortValue = primary === "up" ? m.network.up : m.network.down;
       const up = formatRate(m.network.up);
       const down = formatRate(m.network.down);
       return primary === "up"
@@ -100,15 +106,17 @@ function rateBreakdown(
             value: `↑ ${up}`,
             detail: `↓ ${down}`,
             pct: 0,
+            sortValue,
           }
         : {
             name: n.name,
             value: `↓ ${down}`,
             detail: `↑ ${up}`,
             pct: 0,
+            sortValue,
           };
     })
-    .sort((a, b) => b.value.localeCompare(a.value, undefined, { numeric: true }))
+    .sort((a, b) => b.sortValue - a.sortValue)
     .slice(0, 12);
 }
 
@@ -233,7 +241,7 @@ export function StatPopover({
                     {r.pct > 0 && (
                       <div className="stat-popover__bar-track">
                         <div
-                          className={`stat-popover__bar-fill${r.pct >= 90 ? " is-warn" : ""}${r.pct >= 98 ? " is-error" : ""}`}
+                          className={`stat-popover__bar-fill${r.pct >= 60 ? " is-warn" : ""}${r.pct >= 80 ? " is-error" : ""}`}
                           style={{ width: `${r.pct}%` }}
                         />
                       </div>

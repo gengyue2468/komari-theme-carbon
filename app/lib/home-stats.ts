@@ -1,10 +1,10 @@
 import {
-  billingCycleMonths,
   formatBytes,
+  formatBytesSplit,
   formatRate,
-  isNeverExpire,
   trafficUsedBytes,
 } from "~/lib/format";
+import { CURRENCY_SYMBOLS, normalizeCurrency } from "~/lib/finance";
 import type { NodeInfo, RealtimeMetrics } from "~/types/komari";
 
 export interface HomeStatItem {
@@ -24,9 +24,7 @@ export interface HomeStatItem {
 
 function splitBytes(n: number): { value: string; unit: string } {
   if (!Number.isFinite(n) || n <= 0) return { value: "0", unit: "B" };
-  const s = formatBytes(n, 1);
-  const [value, unit] = s.split(" ");
-  return { value: value ?? "0", unit: unit ?? "B" };
+  return formatBytesSplit(n);
 }
 
 export function computeHomeStats(
@@ -135,19 +133,19 @@ export function nodeFinance(node: NodeInfo): {
       remaining: "—",
     };
   }
-  const months = billingCycleMonths(node.billing_cycle);
-  if (months <= 0) {
+  const cycle = Number(node.billing_cycle);
+  if (!Number.isFinite(cycle) || cycle <= 0) {
     return { monthly: "—", remaining: "—" };
   }
-  const monthly = node.price / months;
-  const cur = node.currency || "";
+  const monthly = (node.price / cycle) * 30;
+  const cur = CURRENCY_SYMBOLS[normalizeCurrency(node.currency)];
   let remaining = "—";
-  if (node.expired_at && !isNeverExpire(node.expired_at)) {
+  if (node.expired_at) {
     const exp = new Date(node.expired_at).getTime();
     const now = Date.now();
     if (exp > now) {
       const days = (exp - now) / 86400000;
-      remaining = `${cur}${((node.price / node.billing_cycle) * days).toFixed(2)}`;
+      remaining = `${cur}${(days > 36500 ? node.price : (node.price / cycle) * days).toFixed(2)}`;
     }
   }
   return {

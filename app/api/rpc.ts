@@ -30,9 +30,18 @@ interface JsonRpcFailure {
 
 type JsonRpcResponse<T> = JsonRpcSuccess<T> | JsonRpcFailure;
 
+const DEFAULT_RPC_TIMEOUT_MS = 30_000;
+
+function normalizeHttpBaseUrl(raw: string): string {
+  const value = raw.trim();
+  if (value.startsWith("ws://")) return `http://${value.slice("ws://".length)}`;
+  if (value.startsWith("wss://")) return `https://${value.slice("wss://".length)}`;
+  return value;
+}
+
 function apiBase(): string {
   const raw = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
-  return raw.replace(/\/$/, "") || "/api";
+  return normalizeHttpBaseUrl(raw).replace(/\/$/, "") || "/api";
 }
 
 function rpcEndpoint(): string {
@@ -59,25 +68,30 @@ export class RpcClient {
     }
   >();
   private connecting: Promise<void> | null = null;
+  private connectingSocket: WebSocket | null = null;
+  private cancelConnecting: (() => void) | null = null;
 
   setTransport(websocket: boolean) {
     this.useWs = websocket;
     if (!websocket) this.closeWs();
   }
 
+  isUsingWebSocket(): boolean {
+    return this.useWs;
+  }
+
   async call<T>(
     method: string,
     params?: RpcParams,
-    timeoutMs = 15000,
+    timeoutMs = DEFAULT_RPC_TIMEOUT_MS,
     signal?: AbortSignal,
   ): Promise<T> {
-    if (this.useWs && !signal) {
-      try {
-        await this.ensureWs();
-        return await this.callWs<T>(method, params, timeoutMs);
-      } catch {
-        // fall through to HTTP
+    if (this.useWs) {
+      if (signal?.aborted) {
+        throw new RpcError(-32000, "RPC request aborted");
       }
+      await this.ensureWs();
+      return this.callWs<T>(method, params, timeoutMs);
     }
     return this.callHttp<T>(method, params, timeoutMs, signal);
   }
@@ -85,7 +99,7 @@ export class RpcClient {
   private async callHttp<T>(
     method: string,
     params?: RpcParams,
-    timeoutMs = 15000,
+    timeoutMs = DEFAULT_RPC_TIMEOUT_MS,
     outerSignal?: AbortSignal,
   ): Promise<T> {
     const id = this.id++;
@@ -113,7 +127,22 @@ export class RpcClient {
       if (!res.ok) {
         throw new RpcError(res.status, `HTTP ${res.status}`);
       }
-      const json = (await res.json()) as JsonRpcResponse<T>;
+      const responseBody = await res.text();
+      if (/anubis|making sure you're not a bot/i.test(responseBody)) {
+        throw new RpcError(
+          res.status,
+          `${rpcEndpoint()} returned an Anubis challenge page instead of JSON`,
+        );
+      }
+      let json: JsonRpcResponse<T>;
+      try {
+        json = JSON.parse(responseBody) as JsonRpcResponse<T>;
+      } catch {
+        throw new RpcError(
+          res.status,
+          `${rpcEndpoint()} returned invalid JSON instead of an RPC response`,
+        );
+      }
       if ("error" in json && json.error) {
         throw new RpcError(json.error.code, json.error.message, json.error.data);
       }
@@ -124,38 +153,80 @@ export class RpcClient {
     }
   }
 
+  private rejectPendingRequests(error: Error) {
+    for (const [, pending] of this.pending) {
+      window.clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.pending.clear();
+  }
+
   private ensureWs(): Promise<void> {
     if (this.ws?.readyState === WebSocket.OPEN) return Promise.resolve();
     if (this.connecting) return this.connecting;
 
-    this.connecting = new Promise<void>((resolve, reject) => {
+    let cancel = () => {};
+    const promise = new Promise<void>((resolve, reject) => {
+      let settled = false;
       try {
         const socket = new WebSocket(wsUrl(rpcEndpoint()));
+
+        const detach = (error?: Error) => {
+          const current = this.ws === socket;
+          if (current) this.ws = null;
+          if (this.connectingSocket === socket) this.connectingSocket = null;
+          if (current && error) this.rejectPendingRequests(error);
+        };
+
+        const finish = (error?: Error) => {
+          if (settled) return;
+          settled = true;
+          if (this.cancelConnecting === cancel) this.cancelConnecting = null;
+          if (error) reject(error);
+          else resolve();
+        };
+
+        cancel = () => {
+          const error = new RpcError(-32000, "WebSocket closed by client");
+          detach(error);
+          if (socket.readyState !== WebSocket.CLOSED) socket.close();
+          finish(error);
+        };
+        this.cancelConnecting = cancel;
+        this.ws = socket;
+        this.connectingSocket = socket;
+
         const failTimer = window.setTimeout(() => {
+          const error = new RpcError(-32000, "WebSocket connect timeout");
+          detach(error);
           socket.close();
-          this.connecting = null;
-          reject(new RpcError(-32000, "WebSocket connect timeout"));
-        }, 8000);
+          finish(error);
+        }, DEFAULT_RPC_TIMEOUT_MS);
 
         socket.onopen = () => {
+          if (this.ws !== socket) {
+            socket.close();
+            finish(new RpcError(-32000, "WebSocket connection superseded"));
+            return;
+          }
           window.clearTimeout(failTimer);
-          this.ws = socket;
-          this.connecting = null;
-          resolve();
+          this.connectingSocket = null;
+          finish();
         };
         socket.onerror = () => {
           window.clearTimeout(failTimer);
-          this.connecting = null;
-          reject(new RpcError(-32000, "WebSocket error"));
+          const error = new RpcError(-32000, "WebSocket error");
+          detach(error);
+          socket.close();
+          finish(error);
         };
         socket.onclose = () => {
           window.clearTimeout(failTimer);
-          this.ws = null;
-          for (const [, p] of this.pending) {
-            window.clearTimeout(p.timer);
-            p.reject(new RpcError(-32000, "WebSocket closed"));
-          }
-          this.pending.clear();
+          const error = new RpcError(-32000, "WebSocket closed");
+          const current = this.ws === socket;
+          if (current) detach(error);
+          else if (this.connectingSocket === socket) this.connectingSocket = null;
+          if (!settled) finish(error);
         };
         socket.onmessage = (ev) => {
           try {
@@ -178,18 +249,31 @@ export class RpcClient {
           }
         };
       } catch (e) {
-        this.connecting = null;
-        reject(e instanceof Error ? e : new Error(String(e)));
+        this.connectingSocket = null;
+        this.cancelConnecting = null;
+        if (!settled) {
+          settled = true;
+          reject(e instanceof Error ? e : new Error(String(e)));
+        }
       }
     });
 
-    return this.connecting;
+    this.connecting = promise;
+    promise.then(
+      () => {
+        if (this.connecting === promise) this.connecting = null;
+      },
+      () => {
+        if (this.connecting === promise) this.connecting = null;
+      },
+    );
+    return promise;
   }
 
   private callWs<T>(
     method: string,
     params?: RpcParams,
-    timeoutMs = 15000,
+    timeoutMs = DEFAULT_RPC_TIMEOUT_MS,
   ): Promise<T> {
     const id = this.id++;
     const req = {
@@ -223,8 +307,13 @@ export class RpcClient {
   }
 
   closeWs() {
-    this.ws?.close();
+    const socket = this.ws ?? this.connectingSocket;
     this.ws = null;
+    this.connectingSocket = null;
+    this.rejectPendingRequests(new RpcError(-32000, "WebSocket closed by client"));
+    this.cancelConnecting?.();
+    this.cancelConnecting = null;
+    if (socket && socket.readyState !== WebSocket.CLOSED) socket.close();
   }
 }
 
@@ -370,6 +459,9 @@ export interface RpcPingTaskInfo {
   latest?: number;
   total?: number;
   type?: string;
+  p50?: number;
+  p99?: number;
+  p99_p50_ratio?: number;
 }
 
 export async function rpcPing(): Promise<string> {
@@ -381,7 +473,7 @@ export async function rpcGetNodes(
 ): Promise<Record<string, RpcClientInfo>> {
   const result = await getRpc().call<
     Record<string, RpcClientInfo> | RpcClientInfo
-  >("common:getNodes", {}, 15000, signal);
+  >("common:getNodes", {}, DEFAULT_RPC_TIMEOUT_MS, signal);
   if (result && typeof result === "object" && "uuid" in result) {
     const c = result as RpcClientInfo;
     return { [c.uuid]: c };
@@ -402,11 +494,13 @@ export async function rpcGetNodesLatestStatus(): Promise<
 
 export async function rpcGetNodeRecentStatus(
   uuid: string,
+  limit = 150,
+  signal?: AbortSignal,
 ): Promise<{ count: number; records: RpcStatusRecord[] }> {
   const res = await getRpc().call<{
     count?: number;
     records?: RpcStatusRecord[];
-  }>("common:getNodeRecentStatus", { uuid });
+  }>("common:getNodeRecentStatus", { uuid, limit }, DEFAULT_RPC_TIMEOUT_MS, signal);
   return { count: res.count ?? 0, records: res.records ?? [] };
 }
 
@@ -445,9 +539,9 @@ export async function rpcGetLoadRecords(
       type: "load",
       uuid,
       hours,
-      maxCount: 2000,
+      max_count: 2000,
     },
-    15000,
+    DEFAULT_RPC_TIMEOUT_MS,
     signal,
   );
   const records = normalizeRecordList(res.records, uuid);
@@ -459,7 +553,7 @@ export async function rpcGetLoadRecords(
 }
 
 export async function rpcGetPingRecords(
-  uuid: string,
+  uuid: string | undefined,
   hours: number,
   signal?: AbortSignal,
 ): Promise<{
@@ -482,11 +576,11 @@ export async function rpcGetPingRecords(
     "common:getRecords",
     {
       type: "ping",
-      uuid,
+      ...(uuid ? { uuid } : {}),
       hours,
-      maxCount: 4000,
+      max_count: 4000,
     },
-    15000,
+    DEFAULT_RPC_TIMEOUT_MS,
     signal,
   );
   const records = normalizeRecordList(res.records, uuid);

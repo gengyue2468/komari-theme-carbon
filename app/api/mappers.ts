@@ -24,6 +24,7 @@ export function mapClientToNodeInfo(c: RpcClientInfo): NodeInfo {
     kernel_version: c.kernel_version || "",
     gpu_name: c.gpu_name || "None",
     region: c.region || "",
+    remark: c.remark,
     mem_total: c.mem_total ?? 0,
     swap_total: c.swap_total ?? 0,
     disk_total: c.disk_total ?? 0,
@@ -37,8 +38,9 @@ export function mapClientToNodeInfo(c: RpcClientInfo): NodeInfo {
     tags: c.tags || "",
     public_remark: c.public_remark,
     hidden: Boolean(c.hidden),
+    version: c.version,
     traffic_limit: c.traffic_limit ?? 0,
-    traffic_limit_type: c.traffic_limit_type || "max",
+    traffic_limit_type: c.traffic_limit_type || "sum",
     created_at: c.created_at || "",
     updated_at: c.updated_at || "",
     ipv4: c.ipv4,
@@ -51,8 +53,7 @@ export function mapClientsToNodes(
 ): NodeInfo[] {
   return Object.values(map)
     .map(mapClientToNodeInfo)
-    // Smaller weight first (matches admin / Emerald ordering)
-    .sort((a, b) => a.weight - b.weight || a.name.localeCompare(b.name));
+    .sort((a, b) => a.weight - b.weight);
 }
 
 function mapPing(
@@ -65,6 +66,7 @@ function mapPing(
       name: p.name,
       latest: p.latest,
       avg: p.avg,
+      tail: p.tail,
       loss: p.loss,
       min: p.min,
       max: p.max,
@@ -156,49 +158,7 @@ const metricsCache = new Map<
 >();
 
 function statusFingerprint(s: RpcNodeStatus): string {
-  const parts = [
-    s.cpu,
-    s.gpu ?? "",
-    s.temp ?? "",
-    s.ram,
-    s.ram_total,
-    s.swap,
-    s.swap_total,
-    s.load,
-    s.load5 ?? "",
-    s.load15 ?? "",
-    s.temp,
-    s.disk,
-    s.disk_total,
-    s.net_in,
-    s.net_out,
-    s.net_total_up,
-    s.net_total_down,
-    s.process,
-    s.connections,
-    s.connections_udp,
-    s.uptime,
-    s.message ?? "",
-  ];
-  if (s.gpu_detail?.detailed_info?.length) {
-    parts.push(
-      s.gpu_detail.detailed_info
-        .map(
-          (d) =>
-            `${d.name}:${d.utilization}:${d.memory_used}:${d.temperature}`,
-        )
-        .join(","),
-    );
-  }
-  if (s.ping) {
-    parts.push(
-      Object.entries(s.ping)
-        .map(([id, p]) => `${id}:${p.latest}:${p.avg}:${p.loss}`)
-        .sort()
-        .join(","),
-    );
-  }
-  return parts.join("|");
+  return JSON.stringify(s);
 }
 
 function mapStatusToMetricsCached(

@@ -186,7 +186,7 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
             </div>
 
             <div className="finance-panel__rates">
-              {summary.rateRows.slice(0, 12).map((row) => (
+              {summary.rateRows.map((row) => (
                 <div key={row.currency} className="finance-panel__rate mono">
                   <span className="finance-panel__rate-code">
                     {row.currency}

@@ -24,12 +24,12 @@ IBM [Carbon Design System](https://carbondesignsystem.com/) + IBM Plex 风格的
 ## 特性
 
 - **Carbon 设计语言**：`@carbon/react` 组件 + Carbon token / SCSS，IBM Plex 字体
-- **实时监控**：RPC2 `common:getNodesLatestStatus` 轮询（间隔可配置），REST 回退
+- **实时监控**：RPC2 `common:getNodesLatestStatus` 轮询（间隔可配置），RPC2 不可用时回退 REST
 - **首页总览**：统计卡片、世界地图（国旗 → 国家质心 + 同址聚合）、节点卡片 / 表格
 - **节点详情**：硬件信息、账单与剩余价值、负载 / 延迟历史图
 - **财务浮层**：多币种换算与汇总（CNY 基准）
 - **i18n**：中 / 英，`language` + `appearance` localStorage，兼容默认主题约定
-- **托管主题配置**（Komari ≥ 1.0.5）：默认视图、uptime、图表时长、密度、刷新间隔、RPC 传输
+- **兼容性**：RPC2 需要 Komari ≥ 1.0.7；托管主题配置需要 Komari ≥ 1.0.5
 - **主题包规范**：`komari-theme.json` + `dist/`，标题 / 描述占位符与页脚 `Powered by Komari Monitor.`
 
 ## 技术栈
@@ -42,7 +42,7 @@ IBM [Carbon Design System](https://carbondesignsystem.com/) + IBM Plex 风格的
 | 图表 | `@carbon/charts-react` |
 | 状态 | Zustand（库存 / 实时）+ TanStack Query（历史） |
 | 地图 | `react-simple-maps` + `country-flag-icons` |
-| 数据 | 同源 `fetch` → `/api/rpc2` + REST，无 axios |
+| 数据 | 同源 `fetch` → `/api/rpc2` + REST fallback，无 axios |
 
 ## 安装
 

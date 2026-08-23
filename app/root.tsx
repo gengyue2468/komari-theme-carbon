@@ -1,9 +1,17 @@
-import { InlineNotification, Loading } from "@carbon/react";
+import { ActionableNotification, Loading } from "@carbon/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { isRouteErrorResponse, Links, Meta, Scripts } from "react-router";
+import {
+  isRouteErrorResponse,
+  Links,
+  Meta,
+  Scripts,
+  useRevalidator,
+} from "react-router";
+import { useTranslation } from "react-i18next";
 import type { Route } from "./+types/root";
 import { AppShell } from "~/components/AppShell";
 import { queryClient } from "~/lib/query-client";
+import { useNodesStore } from "~/stores/nodes";
 import "~/i18n";
 import "./styles/carbon.scss";
 
@@ -59,6 +67,10 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const { t } = useTranslation();
+  const loading = useNodesStore((s) => s.loading);
+  const bootstrap = useNodesStore((s) => s.bootstrap);
+  const revalidator = useRevalidator();
   let title = "Error";
   let subtitle = "An unexpected error occurred.";
 
@@ -75,16 +87,29 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     subtitle = error.message;
   }
 
+  const retry = async () => {
+    if (loading || revalidator.state !== "idle") return;
+    await bootstrap();
+    if (!useNodesStore.getState().error) {
+      revalidator.revalidate();
+    }
+  };
+
   return (
     <QueryClientProvider client={queryClient}>
       <AppShell>
-        <InlineNotification
+        <ActionableNotification
           className="page-banner"
           kind="error"
           title={title}
           subtitle={subtitle}
+          actionButtonLabel={t("app.tryAgain")}
+          onActionButtonClick={() => void retry()}
+          inline
+          role="alert"
           lowContrast
           hideCloseButton
+          aria-disabled={loading || revalidator.state !== "idle"}
         />
       </AppShell>
     </QueryClientProvider>

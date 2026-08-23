@@ -24,12 +24,12 @@ Information density is inspired by Emerald; visuals and components use Carbon to
 ## Features
 
 - **Carbon design language**: `@carbon/react` components + Carbon tokens / SCSS, IBM Plex fonts
-- **Realtime monitoring**: RPC2 `common:getNodesLatestStatus` polling (configurable interval), REST fallback
+- **Realtime monitoring**: RPC2 `common:getNodesLatestStatus` polling (configurable interval), with REST fallback when RPC2 is unavailable
 - **Home overview**: stat cards, world map (flag → country centroid + co-location clustering), node cards / table
 - **Node detail**: hardware info, billing & remaining value, load / latency history charts
 - **Finance popover**: multi-currency conversion and totals (CNY base)
 - **i18n**: zh-CN / en, `language` + `appearance` localStorage, compatible with default theme conventions
-- **Managed theme settings** (Komari ≥ 1.0.5): default view, uptime, chart hours, density, poll interval, RPC transport
+- **Compatibility**: RPC2 requires Komari ≥ 1.0.7; managed theme settings require Komari ≥ 1.0.5
 - **Theme package compliance**: `komari-theme.json` + `dist/`, title / description placeholders, footer `Powered by Komari Monitor.`
 
 ## Tech stack
@@ -42,7 +42,7 @@ Information density is inspired by Emerald; visuals and components use Carbon to
 | Charts | `@carbon/charts-react` |
 | State | Zustand (inventory / realtime) + TanStack Query (history) |
 | Map | `react-simple-maps` + `country-flag-icons` |
-| Data | same-origin `fetch` → `/api/rpc2` + REST |
+| Data | same-origin `fetch` → `/api/rpc2` + REST fallback |
 
 ## Install
 

@@ -1,4 +1,4 @@
-import { Popover, PopoverContent, Tile } from "@carbon/react";
+import { Dropdown, Popover, PopoverContent, Tile } from "@carbon/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { formatBytes, formatRate, percentOf, trafficUsedBytes } from "~/lib/format";
@@ -14,7 +14,6 @@ interface StatPopoverProps {
   icon: React.ReactNode;
   nodes: NodeInfo[];
   realtime: Record<string, RealtimeMetrics>;
-  onlineIds: string[];
   realtimeReady: boolean;
 }
 
@@ -26,11 +25,15 @@ interface BreakdownRow {
   sortValue: number;
 }
 
+type SortMode = "default" | "name" | "high" | "low";
+
 function ramBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetrics>): BreakdownRow[] {
   return nodes
-    .filter((n) => realtime[n.uuid])
     .map((n) => {
       const m = realtime[n.uuid];
+      if (!m) {
+        return { name: n.name, value: "—", detail: "", pct: 0, sortValue: 0 };
+      }
       const used = m.ram.used;
       const total = n.mem_total || m.ram.total || 0;
       return {
@@ -40,16 +43,16 @@ function ramBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetric
         pct: total > 0 ? percentOf(used, total) : 0,
         sortValue: total > 0 ? percentOf(used, total) : 0,
       };
-    })
-    .sort((a, b) => b.sortValue - a.sortValue)
-    .slice(0, 12);
+    });
 }
 
 function diskBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetrics>): BreakdownRow[] {
   return nodes
-    .filter((n) => realtime[n.uuid])
     .map((n) => {
       const m = realtime[n.uuid];
+      if (!m) {
+        return { name: n.name, value: "—", detail: "", pct: 0, sortValue: 0 };
+      }
       const used = m.disk.used;
       const total = n.disk_total || m.disk.total || 0;
       return {
@@ -59,16 +62,21 @@ function diskBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetri
         pct: total > 0 ? percentOf(used, total) : 0,
         sortValue: total > 0 ? percentOf(used, total) : 0,
       };
-    })
-    .sort((a, b) => b.sortValue - a.sortValue)
-    .slice(0, 12);
+    });
 }
 
-function trafficBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMetrics>): BreakdownRow[] {
+function trafficBreakdown(
+  nodes: NodeInfo[],
+  realtime: Record<string, RealtimeMetrics>,
+  outboundLabel: string,
+  inboundLabel: string,
+): BreakdownRow[] {
   return nodes
-    .filter((n) => realtime[n.uuid])
     .map((n) => {
       const m = realtime[n.uuid];
+      if (!m) {
+        return { name: n.name, value: "—", detail: "", pct: 0, sortValue: 0 };
+      }
       const up = m.network.totalUp;
       const down = m.network.totalDown;
       const used = trafficUsedBytes(up, down, n.traffic_limit_type);
@@ -76,48 +84,55 @@ function trafficBreakdown(nodes: NodeInfo[], realtime: Record<string, RealtimeMe
         name: n.name,
         // Respect each node's traffic_limit_type: sum (双向), max (取大), up (出站), down.
         value: formatBytes(used),
-        detail: `↑ ${formatBytes(up)} · ↓ ${formatBytes(down)}`,
+        detail: `${outboundLabel} ${formatBytes(up)} / ${inboundLabel} ${formatBytes(down)}`,
         pct: 0,
         sortValue: used,
       };
-    })
-    .sort((a, b) => b.sortValue - a.sortValue)
-    .slice(0, 12);
+    });
 }
 
 function rateBreakdown(
   nodes: NodeInfo[],
   realtime: Record<string, RealtimeMetrics>,
-  onlineIds: string[],
   primary: "up" | "down",
+  outboundLabel: string,
+  inboundLabel: string,
 ): BreakdownRow[] {
-  const online = new Set(onlineIds);
   return nodes
-    .filter((n) => online.has(n.uuid))
-    .filter((n) => realtime[n.uuid])
     .map((n) => {
       const m = realtime[n.uuid];
+      if (!m) {
+        return { name: n.name, value: "—", detail: "", pct: 0, sortValue: 0 };
+      }
       const sortValue = primary === "up" ? m.network.up : m.network.down;
       const up = formatRate(m.network.up);
       const down = formatRate(m.network.down);
       return primary === "up"
         ? {
             name: n.name,
-            value: `↑ ${up}`,
-            detail: `↓ ${down}`,
+            value: `${outboundLabel} ${up}`,
+            detail: `${inboundLabel} ${down}`,
             pct: 0,
             sortValue,
           }
         : {
             name: n.name,
-            value: `↓ ${down}`,
-            detail: `↑ ${up}`,
+            value: `${inboundLabel} ${down}`,
+            detail: `${outboundLabel} ${up}`,
             pct: 0,
             sortValue,
           };
-    })
-    .sort((a, b) => b.sortValue - a.sortValue)
-    .slice(0, 12);
+    });
+}
+
+function sortRows(rows: BreakdownRow[], mode: SortMode): BreakdownRow[] {
+  if (mode === "default") return rows;
+  return [...rows].sort((a, b) => {
+    if (mode === "name") return a.name.localeCompare(b.name);
+    return mode === "high"
+      ? b.sortValue - a.sortValue
+      : a.sortValue - b.sortValue;
+  });
 }
 
 export function StatPopover({
@@ -129,11 +144,11 @@ export function StatPopover({
   icon,
   nodes,
   realtime,
-  onlineIds,
   realtimeReady,
 }: StatPopoverProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>("default");
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -163,15 +178,43 @@ export function StatPopover({
       case "disk":
         return diskBreakdown(nodes, realtime);
       case "traffic":
-        return trafficBreakdown(nodes, realtime);
+        return trafficBreakdown(
+          nodes,
+          realtime,
+          t("metrics.outbound"),
+          t("metrics.inbound"),
+        );
       case "uplink":
-        return rateBreakdown(nodes, realtime, onlineIds, "up");
+        return rateBreakdown(
+          nodes,
+          realtime,
+          "up",
+          t("metrics.outbound"),
+          t("metrics.inbound"),
+        );
       case "downlink":
-        return rateBreakdown(nodes, realtime, onlineIds, "down");
+        return rateBreakdown(
+          nodes,
+          realtime,
+          "down",
+          t("metrics.outbound"),
+          t("metrics.inbound"),
+        );
       default:
         return [];
     }
-  }, [id, nodes, realtime, onlineIds, realtimeReady]);
+  }, [id, nodes, realtime, realtimeReady, t]);
+
+  const sortedRows = useMemo(() => sortRows(rows, sortMode), [rows, sortMode]);
+  const sortItems = useMemo(
+    () => [
+      { id: "default" as const, text: t("stats.sortDefault") },
+      { id: "name" as const, text: t("stats.sortName") },
+      { id: "high" as const, text: t("stats.sortHigh") },
+      { id: "low" as const, text: t("stats.sortLow") },
+    ],
+    [t],
+  );
 
   return (
     <div ref={rootRef} className="stat-popover-wrap">
@@ -204,9 +247,9 @@ export function StatPopover({
             {icon}
           </div>
           <div className="home-stat-card__value-row">
-            <span className="home-stat-card__value mono">{value}</span>
+            <span className="home-stat-card__value numeric">{value}</span>
             {(unit || suffix) && (
-              <span className="home-stat-card__unit mono">
+              <span className="home-stat-card__unit">
                 {[unit, suffix].filter(Boolean).join(" ")}
               </span>
             )}
@@ -222,21 +265,36 @@ export function StatPopover({
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
-            <span className="stat-popover__head">{label}</span>
+            <div className="stat-popover__toolbar">
+              <span className="stat-popover__head">{label}</span>
+              <Dropdown
+                id={`${panelId}-sort`}
+                size="sm"
+                label={t("stats.sort")}
+                titleText=""
+                hideLabel
+                items={sortItems}
+                itemToString={(item) => (item ? item.text : "")}
+                selectedItem={sortItems.find((item) => item.id === sortMode)}
+                onChange={({ selectedItem }) => {
+                  if (selectedItem) setSortMode(selectedItem.id);
+                }}
+              />
+            </div>
             {!realtimeReady ? (
               <p className="stat-popover__empty">{t("app.statusLoading")}</p>
             ) : rows.length === 0 ? (
               <p className="stat-popover__empty">—</p>
             ) : (
               <div className="stat-popover__list">
-                {rows.map((r, i) => (
+                {sortedRows.map((r, i) => (
                   <div key={i} className="stat-popover__row">
                     <div className="stat-popover__row-head">
                       <span className="stat-popover__name">{r.name}</span>
-                      <span className="stat-popover__value mono">{r.value}</span>
+                      <span className="stat-popover__value numeric">{r.value}</span>
                     </div>
                     {r.detail && (
-                      <span className="stat-popover__detail mono">{r.detail}</span>
+                      <span className="stat-popover__detail numeric">{r.detail}</span>
                     )}
                     {r.pct > 0 && (
                       <div className="stat-popover__bar-track">

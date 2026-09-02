@@ -9,16 +9,15 @@ import {
   TableRow,
   Tag,
 } from "@carbon/react";
-import { ArrowDown, ArrowUp } from "@carbon/icons-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { QuickIcon } from "~/components/BrandIcon";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
   formatBytes,
+  formatUptimeWithFormat,
   formatRate,
-  formatUptime,
   parseTags,
   percentOf,
   trafficLimitTypeLabel,
@@ -62,11 +61,11 @@ function MiniBar({ pct }: { pct: number | null }) {
 function MetricCell({ pct, sub }: { pct: number | null; sub?: string }) {
   return (
     <div className="table-metric">
-      <span className="table-metric__pct mono">
+      <span className="table-metric__pct numeric">
         {pct == null ? "—" : `${pct.toFixed(1)}%`}
       </span>
       <MiniBar pct={pct} />
-      {sub ? <span className="table-metric__sub mono">{sub}</span> : null}
+      {sub ? <span className="table-metric__sub numeric">{sub}</span> : null}
     </div>
   );
 }
@@ -152,7 +151,7 @@ export function NodeTable({
           _tLimit: n.traffic_limit,
           _netUp: m ? formatRate(m.network.up) : "—",
           _netDown: m ? formatRate(m.network.down) : "—",
-          _uptime: m ? formatUptime(m.uptime) : "—",
+          _uptime: m ? formatUptimeWithFormat(m.uptime, "minute") : "—",
           _price: price,
           _nets: (() => {
             const history = buildNodePingHistorySummary(pingHistory, n.uuid);
@@ -175,7 +174,7 @@ export function NodeTable({
       <p className="node-table__scroll-hint">
         {t("table.scrollHint")}
       </p>
-      <DataTable rows={rows} headers={headers} isSortable size="lg">
+      <DataTable rows={rows} headers={headers} isSortable size="md">
         {({
           rows: dtRows,
           headers: dtHeaders,
@@ -185,7 +184,7 @@ export function NodeTable({
           getTableContainerProps,
         }) => (
           <TableContainer {...getTableContainerProps()}>
-            <Table {...getTableProps()} size="lg">
+            <Table {...getTableProps()} size="md">
               <TableHead>
                 <TableRow>
                   {dtHeaders.map((header) => {
@@ -219,16 +218,7 @@ export function NodeTable({
                             ? "table-row-clickable"
                             : "table-row-clickable is-offline"
                       }
-                      tabIndex={0}
-                      role="link"
-                      aria-label={d.name || row.id}
                       onClick={() => navigate(`/node/${row.id}`)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          navigate(`/node/${row.id}`);
-                        }
-                      }}
                     >
                       <TableCell>
                         <span
@@ -265,23 +255,29 @@ export function NodeTable({
                       </TableCell>
 
                       <TableCell>
-                        <div className="table-name">
-                          <div className="table-name__top">
-                            <RegionFlag
-                              region={d._n.region}
-                              className="table-flag"
-                            />
-                            <span className="table-name__text">{d.name}</span>
+                        <Link
+                          className="table-name__link"
+                          to={`/node/${d.id}`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <div className="table-name">
+                            <div className="table-name__top">
+                              <RegionFlag
+                                region={d._n.region}
+                                className="table-flag"
+                              />
+                              <span className="table-name__text">{d.name}</span>
+                            </div>
+                            <span className="table-name__sub">
+                              {!realtimeReady
+                                ? t("app.statusLoading")
+                                : d._on
+                                  ? d._uptime
+                                  : t("app.offline")}
+                              {d._price ? ` / ${d._price}` : ""}
+                            </span>
                           </div>
-                          <span className="table-name__sub mono">
-                            {!realtimeReady
-                              ? t("app.statusLoading")
-                              : d._on
-                                ? d._uptime
-                                : t("app.offline")}
-                            {d._price ? ` · ${d._price}` : ""}
-                          </span>
-                        </div>
+                        </Link>
                       </TableCell>
 
                       <TableCell>
@@ -313,10 +309,10 @@ export function NodeTable({
                       <TableCell>
                         <MetricCell
                           pct={d._ramPct}
-                           sub={
-                             d._m
-                               ? `${formatBytes(d._m.ram.used)} / ${formatBytes(d._n.mem_total || d._m.ram.total)}`
-                               : undefined
+                          sub={
+                            d._m
+                              ? `${formatBytes(d._m.ram.used)} / ${formatBytes(d._n.mem_total || d._m.ram.total)}`
+                              : undefined
                           }
                         />
                       </TableCell>
@@ -324,10 +320,10 @@ export function NodeTable({
                       <TableCell>
                         <MetricCell
                           pct={d._diskPct}
-                           sub={
-                             d._m
-                               ? `${formatBytes(d._m.disk.used)} / ${formatBytes(d._n.disk_total || d._m.disk.total)}`
-                               : undefined
+                          sub={
+                            d._m
+                              ? `${formatBytes(d._m.disk.used)} / ${formatBytes(d._n.disk_total || d._m.disk.total)}`
+                              : undefined
                           }
                         />
                       </TableCell>
@@ -339,7 +335,7 @@ export function NodeTable({
                             !d._m
                               ? "—"
                               : d._tLimit > 0
-                                ? `${formatBytes(d._tUsed)} / ${formatBytes(d._tLimit)} · ${trafficLimitTypeLabel(d._n.traffic_limit_type)}`
+                                ? `${formatBytes(d._tUsed)} / ${formatBytes(d._tLimit)} / ${trafficLimitTypeLabel(d._n.traffic_limit_type)}`
                                 : "∞"
                           }
                         />
@@ -347,12 +343,12 @@ export function NodeTable({
 
                       <TableCell>
                         <div className="table-rate-cell">
-                          <span className="table-rate-cell__line table-rate__up mono">
-                            <ArrowUp size={12} />
+                          <span className="table-rate-cell__line table-rate__up numeric">
+                            <span className="direction-label">{t("metrics.outbound")}</span>
                             {d._netUp}
                           </span>
-                          <span className="table-rate-cell__line table-rate__down mono">
-                            <ArrowDown size={12} />
+                          <span className="table-rate-cell__line table-rate__down numeric">
+                            <span className="direction-label">{t("metrics.inbound")}</span>
                             {d._netDown}
                           </span>
                         </div>
@@ -360,11 +356,11 @@ export function NodeTable({
 
                       <TableCell>
                         {!realtimeReady ? (
-                          <span className="table-ping-cell__empty mono">
+                          <span className="table-ping-cell__empty">
                             {t("app.statusLoading")}
                           </span>
                         ) : d._nets.visible.length === 0 ? (
-                          <span className="table-ping-cell__empty mono">—</span>
+                          <span className="table-ping-cell__empty">—</span>
                         ) : (
                           <div className="table-ping-cell">
                             <div className="table-ping-cell__head">
@@ -383,10 +379,10 @@ export function NodeTable({
                                 >
                                   {point.name || point.id}
                                 </span>
-                                 <span className="table-ping-cell__metric mono">
+                                 <span className="table-ping-cell__metric numeric">
                                    {formatLatencyMs(point.latencyMs)}
                                 </span>
-                                <span className="table-ping-cell__metric mono">
+                                 <span className="table-ping-cell__metric numeric">
                                   {point.lossPct != null
                                     ? `${point.lossPct.toFixed(1)}%`
                                     : "—"}

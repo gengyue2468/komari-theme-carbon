@@ -90,7 +90,7 @@ export function NodeWorldMap({
         role="region"
         aria-label={t("map.title")}
       >
-        <span className="node-map__meta mono">
+        <span className="node-map__meta">
           {!realtimeReady
             ? t("app.statusLoading")
             : `${onlineCount}/${nodes.length} ${t("app.online")}`}
@@ -227,10 +227,10 @@ export function NodeWorldMap({
             onMouseEnter={() => setHover(hover)}
             onMouseLeave={() => setHover(null)}
           >
-            <div className="node-map__panel-head mono">
+            <div className="node-map__panel-head">
               <span>
                 {hover.city}
-                {hover.count > 1 ? ` · ${hover.count}` : ""}
+                {hover.count > 1 ? ` / ${hover.count}` : ""}
               </span>
               <span>
                 {!realtimeReady
@@ -246,7 +246,7 @@ export function NodeWorldMap({
                     key={mem.uuid}
                     type="button"
                     className={`node-map__card${on ? " is-on" : " is-off"}`}
-                    aria-label={t("map.openNode")}
+                    aria-label={t("map.openNode", { name: mem.name })}
                     onClick={() => navigate(`/node/${mem.uuid}`)}
                   >
                     <span
@@ -255,12 +255,12 @@ export function NodeWorldMap({
                     />
                     <span className="node-map__card-body">
                       <span className="node-map__card-name">{mem.name}</span>
-                        <span className="node-map__card-meta mono">
-                          {mem.city} · {realtimeReady
-                            ? on
-                              ? t("app.online")
-                              : t("app.offline")
-                            : t("app.statusLoading")}
+                      <span className="node-map__card-meta">
+                        {mem.city} / {realtimeReady
+                          ? on
+                            ? t("app.online")
+                            : t("app.offline")
+                          : t("app.statusLoading")}
                       </span>
                     </span>
                   </button>

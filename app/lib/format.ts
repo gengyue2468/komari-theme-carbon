@@ -120,6 +120,23 @@ export function formatUptime(seconds: number): string {
   return formatUptimeWithFormat(seconds, "second");
 }
 
+const DATE_TIME_MINUTE_OPTIONS: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+};
+
+export function formatDateTimeWithoutSeconds(
+  value: Date | number | string,
+  language = i18n.language,
+): string {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(language, DATE_TIME_MINUTE_OPTIONS).format(date);
+}
+
 /**
  * Billing cycle (days) → semantic label, matching Komari's renewal mapping
  * (27–32=month, 87–95=quarter, 175–185=half-year, 360–370=year, …).

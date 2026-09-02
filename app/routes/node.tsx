@@ -1,7 +1,6 @@
 import { Button, Tag, Tile } from "@carbon/react";
 import {
   Application,
-  ArrowDown,
   ArrowLeft,
   ArrowUp,
   Calendar,
@@ -47,6 +46,7 @@ import {
 import {
   formatBillingCycle,
   formatBytes,
+  formatDateTimeWithoutSeconds,
   formatRate,
   formatRemainTime,
   formatUptimeWithFormat,
@@ -197,7 +197,7 @@ export default function NodeDetail() {
   const remainTimeText = formatRemainTime(node.expired_at);
   const expireDateText =
     node.expired_at && !isNeverExpire(node.expired_at)
-      ? new Date(node.expired_at).toLocaleDateString()
+      ? new Date(node.expired_at).toLocaleDateString(i18n.language)
       : undefined;
 
   // Live metric cards: quick snapshot before finance
@@ -223,11 +223,11 @@ export default function NodeDetail() {
     {
       key: "cpu",
       label: t("metrics.cpu"),
-       value: cpuPct != null ? `${cpuPct.toFixed(1)}%` : "—",
+      value: cpuPct != null ? `${cpuPct.toFixed(1)}%` : "—",
       icon: <Chip size={16} />,
       bar: cpuPct,
       hint: metrics
-        ? `${metrics.load.load1.toFixed(2)} · ${metrics.load.load5.toFixed(2)} · ${metrics.load.load15.toFixed(2)}`
+        ? `${metrics.load.load1.toFixed(2)} / ${metrics.load.load5.toFixed(2)} / ${metrics.load.load15.toFixed(2)}`
         : "",
     },
     {
@@ -238,7 +238,7 @@ export default function NodeDetail() {
       bar: ramPct,
       hint:
         metrics && ramPct != null
-           ? `${ramPct.toFixed(1)}% / ${formatBytes(ramTotal)}`
+          ? `${ramPct.toFixed(1)}% / ${formatBytes(ramTotal)}`
           : "",
     },
     {
@@ -249,7 +249,7 @@ export default function NodeDetail() {
       bar: diskPct,
       hint:
         metrics && diskPct != null
-           ? `${diskPct.toFixed(1)}% / ${formatBytes(diskTotal)}`
+          ? `${diskPct.toFixed(1)}% / ${formatBytes(diskTotal)}`
           : "",
     },
     {
@@ -258,14 +258,14 @@ export default function NodeDetail() {
       value: metrics ? String(conns) : "—",
       icon: <Application size={16} />,
       bar: null,
-      hint: metrics ? `TCP ${tcpConns} · UDP ${udpConns}` : "",
+      hint: metrics ? `TCP ${tcpConns} / UDP ${udpConns}` : "",
     },
     ...(hasGpu
       ? [
           {
             key: "gpu",
             label: t("metrics.gpu"),
-             value: gpuPct != null ? `${gpuPct.toFixed(1)}%` : "—",
+            value: gpuPct != null ? `${gpuPct.toFixed(1)}%` : "—",
             icon: <Video size={16} />,
             bar: gpuPct,
             hint: metrics?.gpu ? node.gpu_name : "",
@@ -279,7 +279,7 @@ export default function NodeDetail() {
       key: "price",
       label: t("detail.nodePrice"),
       value: priceText,
-      unit: node.price > 0 ? `${priceMetric.currency} · ${cycleText}` : undefined,
+      unit: node.price > 0 ? `${priceMetric.currency} / ${cycleText}` : undefined,
       Icon: Currency,
     },
     {
@@ -312,10 +312,10 @@ export default function NodeDetail() {
   const cpuCoresText =
     node.cpu_physical_cores > 0
       ? t("detail.coresDetail", {
-          logical: node.cpu_cores,
-          physical: node.cpu_physical_cores,
+          cores: node.cpu_physical_cores,
+          threads: node.cpu_cores,
         })
-      : `×${node.cpu_cores}`;
+      : `${node.cpu_cores}T`;
 
   const hardwareItems = [
     {
@@ -359,9 +359,10 @@ export default function NodeDetail() {
     {
       label: t("detail.lastSeen"),
       value: (realtimeReady && (realtimeUpdatedAt[uuid] ?? metrics?.updated_at))
-        ? new Date(
+        ? formatDateTimeWithoutSeconds(
             realtimeUpdatedAt[uuid] ?? metrics?.updated_at ?? "",
-          ).toLocaleString(i18n.language)
+            i18n.language,
+          )
         : "—",
       icon: <RecentlyViewed size={16} />,
     },
@@ -416,34 +417,37 @@ export default function NodeDetail() {
             <ScrollingName name={node.name} />
           </h1>
           <div className="detail-top__meta">
-            <Tag
-              type={!realtimeReady ? "cool-gray" : online ? "blue" : "red"}
-              size="sm"
-              title={
-                !realtimeReady
-                  ? t("app.statusLoading")
-                  : online
-                    ? t("app.online")
-                    : t("app.offline")
-              }
-            >
-              {!realtimeReady
-                ? t("app.statusLoading")
-                : online
-                  ? t("app.online")
-                  : t("app.offline")}
-            </Tag>
             {tags.map((tag) => (
               <Tag key={tag} type="gray" size="sm">
                 {tag}
               </Tag>
             ))}
-            {node.auto_renewal ? (
-              <Tag type="blue" size="sm">
-                {t("detail.autoRenewal")}
-              </Tag>
-            ) : null}
           </div>
+        </div>
+        <div className="detail-top__right">
+          {node.auto_renewal ? (
+            <Tag type="blue" size="sm">
+              {t("detail.autoRenewal")}
+            </Tag>
+          ) : null}
+          <span
+            className={`detail-status-dot${!realtimeReady ? " is-loading" : online ? "" : " is-offline"}`}
+            role="status"
+            aria-label={
+              !realtimeReady
+                ? t("app.statusLoading")
+                : online
+                  ? t("app.online")
+                  : t("app.offline")
+            }
+            title={
+              !realtimeReady
+                ? t("app.statusLoading")
+                : online
+                  ? t("app.online")
+                  : t("app.offline")
+            }
+          />
         </div>
       </div>
 
@@ -468,7 +472,7 @@ export default function NodeDetail() {
               {card.icon}
             </div>
             <div className="detail-metric-card__value-row">
-              <span className="detail-metric-card__value mono">{card.value}</span>
+              <span className="detail-metric-card__value numeric">{card.value}</span>
             </div>
             {card.bar != null && (
               <div className="detail-metric-card__bar-track">
@@ -479,7 +483,7 @@ export default function NodeDetail() {
               </div>
             )}
             {card.hint ? (
-              <span className="detail-metric-card__hint mono">{card.hint}</span>
+              <span className="detail-metric-card__hint numeric">{card.hint}</span>
             ) : null}
           </Tile>
         ))}
@@ -496,9 +500,9 @@ export default function NodeDetail() {
               <card.Icon size={16} className="detail-metric-card__icon" />
             </div>
             <div className="detail-metric-card__value-row">
-              <span className="detail-metric-card__value mono">{card.value}</span>
+              <span className="detail-metric-card__value numeric">{card.value}</span>
               {card.unit ? (
-                <span className="detail-metric-card__unit mono">{card.unit}</span>
+                <span className="detail-metric-card__unit">{card.unit}</span>
               ) : null}
             </div>
           </Tile>
@@ -515,8 +519,8 @@ export default function NodeDetail() {
                 className={`detail-info-cell${item.wide ? " is-wide" : ""}`}
               >
                 <div className="detail-info-cell__label">
-                  {item.icon}
                   <span>{item.label}</span>
+                  {item.icon}
                 </div>
                 <div className="detail-info-cell__value" title={item.value}>
                   {item.value}
@@ -532,8 +536,8 @@ export default function NodeDetail() {
             {systemItems.map((item) => (
               <div key={item.label} className="detail-info-cell">
                 <div className="detail-info-cell__label">
-                  {item.icon}
                   <span>{item.label}</span>
+                  {item.icon}
                 </div>
                 <div className="detail-info-cell__value" title={item.value}>
                   {item.value}
@@ -549,10 +553,10 @@ export default function NodeDetail() {
             {storageItems.map((item) => (
               <div key={item.label} className="detail-info-cell">
                 <div className="detail-info-cell__label">
-                  {item.icon}
                   <span>{item.label}</span>
+                  {item.icon}
                 </div>
-                <div className="detail-info-cell__value mono">
+                <div className="detail-info-cell__value numeric">
                   {item.value}
                   {item.sub ? (
                     <span className="detail-info-cell__sub"> {item.sub}</span>
@@ -592,16 +596,22 @@ export default function NodeDetail() {
               ) : null}
               <div className="detail-info-cell__body">
                 <div className="detail-info-cell__label">
-                  <Download size={16} />
                   <span>{t("metrics.traffic")}</span>
                   {metrics ? (
-                    <span className="detail-traffic-ud mono">
-                      {formatBytes(metrics.network.totalUp)} /{" "}
-                      {formatBytes(metrics.network.totalDown)}
+                    <span className="detail-traffic-ud numeric">
+                      <span className="detail-traffic-ud__item">
+                        <span className="detail-traffic-ud__label">{t("metrics.outbound")}</span>
+                        {formatBytes(metrics.network.totalUp)}
+                      </span>
+                      <span className="detail-traffic-ud__item">
+                        <span className="detail-traffic-ud__label">{t("metrics.inbound")}</span>
+                        {formatBytes(metrics.network.totalDown)}
+                      </span>
                     </span>
                   ) : null}
+                  <Download size={16} />
                 </div>
-                <div className="detail-info-cell__value mono">
+                <div className="detail-info-cell__value numeric">
                   {hasLimit && metrics
                     ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)}`
                     : hasLimit
@@ -610,13 +620,13 @@ export default function NodeDetail() {
                   {hasLimit && trafficPct != null ? (
                     <span className="detail-traffic-pct">
                       {" "}
-                      · {trafficPct.toFixed(1)}%
+                       / {trafficPct.toFixed(1)}%
                     </span>
                   ) : null}
                   {hasLimit ? (
                     <span className="detail-traffic-pct">
                       {" "}
-                      · {trafficLimitTypeLabel(node.traffic_limit_type)}
+                       / {trafficLimitTypeLabel(node.traffic_limit_type)}
                     </span>
                   ) : null}
                 </div>
@@ -624,16 +634,16 @@ export default function NodeDetail() {
             </div>
             <div className="detail-info-cell">
               <div className="detail-info-cell__label">
-                <ArrowUp size={16} />
                 <span>{t("metrics.rate")}</span>
+                <ArrowUp size={16} />
               </div>
-              <div className="detail-info-cell__value mono rate-pair">
+              <div className="detail-info-cell__value numeric rate-pair">
                 <span className="rate-pair__up">
-                  <ArrowUp size={12} />
+                  <span className="direction-label">{t("metrics.outbound")}</span>
                   {metrics ? formatRate(metrics.network.up) : "—"}
                 </span>
                 <span className="rate-pair__down">
-                  <ArrowDown size={12} />
+                  <span className="direction-label">{t("metrics.inbound")}</span>
                   {metrics ? formatRate(metrics.network.down) : "—"}
                 </span>
               </div>
@@ -658,11 +668,11 @@ export default function NodeDetail() {
                   <Video size={16} className="detail-metric-card__icon" />
                 </div>
                 <div className="detail-metric-card__value-row">
-                  <span className="detail-metric-card__value mono">
+                    <span className="detail-metric-card__value numeric">
                      {g.utilization.toFixed(1)}%
-                  </span>
-                  {g.temperature > 0 ? (
-                    <span className="detail-metric-card__unit mono">
+                   </span>
+                   {g.temperature > 0 ? (
+                    <span className="detail-metric-card__unit">
                       {g.temperature}°C
                     </span>
                   ) : null}
@@ -675,7 +685,7 @@ export default function NodeDetail() {
                         style={{ width: `${Math.min(100, memPct)}%` }}
                       />
                     </div>
-                    <span className="detail-metric-card__hint mono">
+                    <span className="detail-metric-card__hint numeric">
                       {formatBytes(g.memory_used)} / {formatBytes(g.memory_total)}
                     </span>
                   </>

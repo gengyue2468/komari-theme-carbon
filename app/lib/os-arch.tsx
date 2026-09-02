@@ -10,7 +10,7 @@ export type IconRef =
 export function getArchIcon(arch: string, cpuName = ""): { icon: IconRef; label: string } {
   const a = arch.trim().toLowerCase();
   const cpu = cpuName.trim().toLowerCase();
-  const label = [cpuName.trim(), arch.trim()].filter(Boolean).join(" · ") || "CPU";
+  const label = [cpuName.trim(), arch.trim()].filter(Boolean).join(" / ") || "CPU";
 
   // Brand logos are inlined locally (see lib/brand-icons.ts) — no CDN.
   if (

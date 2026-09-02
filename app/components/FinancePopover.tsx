@@ -104,11 +104,11 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
             <Currency size={16} className="home-stat-card__icon" />
           </div>
           <div className="home-stat-card__value-row">
-            <span className="home-stat-card__value mono">
+            <span className="home-stat-card__value numeric">
               {summary.remaining.symbol}
               {summary.remaining.value}
             </span>
-            <span className="home-stat-card__unit mono">
+            <span className="home-stat-card__unit">
               {summary.remaining.currency}
             </span>
           </div>
@@ -128,7 +128,7 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
                 <span className="finance-panel__label">
                   {t("stats.totalValue")}
                 </span>
-                <span className="finance-panel__value mono">
+                <span className="finance-panel__value numeric">
                   <span className="finance-panel__sym">
                     {summary.total.symbol}
                   </span>
@@ -139,13 +139,13 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
                 <span className="finance-panel__label">
                   {t("stats.monthlyCost")}
                 </span>
-                <span className="finance-panel__value mono">
+                <span className="finance-panel__value numeric">
                   <span className="finance-panel__sym">
                     {summary.monthly.symbol}
                   </span>
                   {summary.monthly.value}
                 </span>
-                <span className="finance-panel__hint mono">
+                <span className="finance-panel__hint">
                   {summary.monthly.currency}
                 </span>
               </div>
@@ -153,7 +153,7 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
                 <span className="finance-panel__label">
                   {t("stats.remaining")}
                 </span>
-                <span className="finance-panel__value mono">
+                <span className="finance-panel__value numeric">
                   <span className="finance-panel__sym">
                     {summary.remaining.symbol}
                   </span>
@@ -187,7 +187,7 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
 
             <div className="finance-panel__rates">
               {summary.rateRows.map((row) => (
-                <div key={row.currency} className="finance-panel__rate mono">
+                <div key={row.currency} className="finance-panel__rate numeric">
                   <span className="finance-panel__rate-code">
                     {row.currency}
                   </span>

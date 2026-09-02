@@ -23,9 +23,9 @@ export function HomeStatCard({
         <Icon size={16} className="home-stat-card__icon" />
       </div>
       <div className="home-stat-card__value-row">
-        <span className="home-stat-card__value mono">{value}</span>
+        <span className="home-stat-card__value numeric">{value}</span>
         {(unit || suffix) && (
-          <span className="home-stat-card__unit mono">
+        <span className="home-stat-card__unit">
             {[unit, suffix].filter(Boolean).join(" ")}
           </span>
         )}

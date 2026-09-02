@@ -243,13 +243,12 @@ export default function Home() {
                   key={stat.id}
                   stat={stat}
                   label={t(stat.labelKey)}
-                  value={stat.value}
-                  unit={stat.unit}
-                  suffix={stat.suffix}
+                   value={stat.value}
+                   unit={stat.unit}
+                   suffix={stat.suffix}
                   icon={<Icon size={16} className="home-stat-card__icon" />}
                   nodes={groupNodes}
                   realtime={realtime}
-                  onlineIds={onlineIds}
                   realtimeReady={realtimeReady}
                 />
               );

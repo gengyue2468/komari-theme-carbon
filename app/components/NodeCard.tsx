@@ -1,5 +1,4 @@
 import { Tag, Tile } from "@carbon/react";
-import { ArrowDown, ArrowUp } from "@carbon/icons-react";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -14,8 +13,9 @@ import { QuickIcon } from "~/components/BrandIcon";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
   formatBytes,
+  formatDateTimeWithoutSeconds,
   formatRate,
-  formatUptime,
+  formatUptimeWithFormat,
   parseTags,
   percentOf,
   trafficLimitTypeLabel,
@@ -74,14 +74,14 @@ function Kv({
       <div className="card-kv__head">
         <span className="card-kv__label">{label}</span>
         {(value || unit) && (
-          <span className="card-kv__value mono">
+          <span className="card-kv__value numeric">
             {value}
             {unit && <span className="card-kv__unit">{unit}</span>}
           </span>
         )}
       </div>
       <Bar pct={pct} />
-      {hint && <span className="card-kv__hint mono">{hint}</span>}
+      {hint && <span className="card-kv__hint numeric">{hint}</span>}
     </div>
   );
 }
@@ -97,8 +97,7 @@ function Row({ label, children }: { label: React.ReactNode; children: React.Reac
 
 function formatLastSeen(value: string | undefined, language: string): string {
   if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(language);
+  return formatDateTimeWithoutSeconds(value, language);
 }
 
 /* ── Card ── */
@@ -125,7 +124,7 @@ function PingStrip({
     <div className="card-spark">
       <div className="card-row">
         <span className="card-row__label">{label}</span>
-        <span className="card-row__value mono">{value}</span>
+        <span className="card-row__value numeric">{value}</span>
       </div>
       <div className="card-spark__track" aria-hidden>
         {cells.map((point, index) => (
@@ -176,22 +175,70 @@ function StatGroup({ node, metrics, showUptime }: Pick<NodeCardProps, "node" | "
       <section className="card-section">
         <h3 className="card-section__title">{t("detail.system")}</h3>
         <div className="card-kv-grid">
-          <Kv label={t("metrics.cpu")} value={cpu != null ? cpu.toFixed(1) : "—"} unit={cpu != null ? "%" : undefined} pct={cpu} hint={metrics ? `${metrics.load.load1.toFixed(2)}, ${metrics.load.load5.toFixed(2)}, ${metrics.load.load15.toFixed(2)}` : "—"} />
-          <Kv label={t("metrics.ram")} value={ram != null ? ram.toFixed(1) : "—"} unit={ram != null ? "%" : undefined} pct={ram} hint={metrics ? `${ramUsed} / ${ramTotal}` : "—"} />
-          <Kv label={t("metrics.disk")} value={disk != null ? disk.toFixed(1) : "—"} unit={disk != null ? "%" : undefined} pct={disk} hint={metrics ? `${diskUsed} / ${diskTotal}` : "—"} />
-          <Kv label={t("metrics.traffic")} value={trafficPct != null ? trafficPct.toFixed(1) : "—"} unit={trafficPct != null ? "%" : undefined} pct={trafficPct} hint={metrics && node.traffic_limit > 0 ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)} · ${trafficLimitTypeLabel(node.traffic_limit_type)}` : node.traffic_limit > 0 ? "—" : "∞"} />
+          <Kv
+            label={t("metrics.cpu")}
+            value={cpu != null ? cpu.toFixed(1) : "—"}
+            unit={cpu != null ? "%" : undefined}
+            pct={cpu}
+            hint={
+              metrics
+                ? `${metrics.load.load1.toFixed(2)} / ${metrics.load.load5.toFixed(2)} / ${metrics.load.load15.toFixed(2)}`
+                : "—"
+            }
+          />
+          <Kv
+            label={t("metrics.ram")}
+            value={ram != null ? ram.toFixed(1) : "—"}
+            unit={ram != null ? "%" : undefined}
+            pct={ram}
+            hint={metrics ? `${ramUsed} / ${ramTotal}` : "—"}
+          />
+          <Kv
+            label={t("metrics.disk")}
+            value={disk != null ? disk.toFixed(1) : "—"}
+            unit={disk != null ? "%" : undefined}
+            pct={disk}
+            hint={metrics ? `${diskUsed} / ${diskTotal}` : "—"}
+          />
+          <Kv
+            label={t("metrics.traffic")}
+            value={trafficPct != null ? trafficPct.toFixed(1) : "—"}
+            unit={trafficPct != null ? "%" : undefined}
+            pct={trafficPct}
+            hint={
+              metrics && node.traffic_limit > 0
+                ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)} / ${trafficLimitTypeLabel(node.traffic_limit_type)}`
+                : node.traffic_limit > 0
+                  ? "—"
+                  : "∞"
+            }
+          />
         </div>
       </section>
       <section className="card-section">
         <h3 className="card-section__title">{t("detail.network")}</h3>
         <Row label={t("metrics.rate")}>
-          <span className="card-rate mono">
-            <span className="card-rate__up"><ArrowUp size={12} />{metrics ? formatRate(metrics.network.up) : "—"}</span>
-            <span className="card-rate__down"><ArrowDown size={12} />{metrics ? formatRate(metrics.network.down) : "—"}</span>
+          <span className="card-rate numeric">
+            <span className="card-rate__up">
+              <span className="direction-label">{t("metrics.outbound")}</span>
+              {metrics ? formatRate(metrics.network.up) : "—"}
+            </span>
+            <span className="card-rate__down">
+              <span className="direction-label">{t("metrics.inbound")}</span>
+              {metrics ? formatRate(metrics.network.down) : "—"}
+            </span>
           </span>
         </Row>
-        {showUptime && <Row label={t("metrics.uptime")}><span className="mono">{metrics ? formatUptime(metrics.uptime) : "—"}</span></Row>}
-        <Row label={t("detail.price")}><span className="mono">{price}</span></Row>
+        {showUptime ? (
+          <Row label={t("metrics.uptime")}>
+            <span className="numeric">
+              {metrics ? formatUptimeWithFormat(metrics.uptime, "minute") : "—"}
+            </span>
+          </Row>
+        ) : null}
+        <Row label={t("detail.price")}>
+          <span className="numeric">{price}</span>
+        </Row>
       </section>
 
     </>
@@ -228,7 +275,7 @@ function SectionPing({
     <section className="card-section">
       <h3 className="card-section__title">{t("metrics.monitoringPoints")}</h3>
       {!realtimeReady ? (
-        <span className="card-row__value mono">{t("app.statusLoading")}</span>
+        <span className="card-row__value">{t("app.statusLoading")}</span>
       ) : ping.visible.length > 0 ? (
         <div className="card-ping-points">
           {ping.visible.map((point) => (
@@ -292,7 +339,7 @@ function SectionPing({
           </div>
         </div>
       ) : (
-        <span className="card-row__value mono">N/A</span>
+        <span className="card-row__value">{t("detail.notApplicable")}</span>
       )}
     </section>
   );
@@ -343,17 +390,17 @@ export const NodeCard = memo(
           <div className="node-card__head-left">
             <h3 className="node-card__title" title={node.name}>
               <RegionFlag region={node.region} className="node-card__flag" />
-              {node.name}
+              <span className="node-card__title-text">{node.name}</span>
             </h3>
           </div>
           <div className="node-card__head-right">
             {!realtimeReady || online ? (
-              <Tag
-                type={!realtimeReady ? "cool-gray" : "blue"}
-                size="sm"
-              >
-                {!realtimeReady ? t("app.statusLoading") : t("app.online")}
-              </Tag>
+              <span
+                className={`node-card__status-dot${!realtimeReady ? " is-loading" : ""}`}
+                role="status"
+                aria-label={!realtimeReady ? t("app.statusLoading") : t("app.online")}
+                title={!realtimeReady ? t("app.statusLoading") : t("app.online")}
+              />
             ) : null}
           </div>
         </div>
@@ -364,11 +411,13 @@ export const NodeCard = memo(
               {node.group}
             </Tag>
           ) : null}
-          <div className="node-card__badges">
-            <QuickIcon icon={os.icon} size={16} title={os.label} />
-            <QuickIcon icon={arch.icon} size={16} title={arch.label} />
+          <div className="node-card__sub-meta">
+            <span className="node-card__cpu">{node.cpu_name}</span>
+            <div className="node-card__badges">
+              <QuickIcon icon={os.icon} size={16} title={os.label} />
+              <QuickIcon icon={arch.icon} size={16} title={arch.label} />
+            </div>
           </div>
-          <span className="node-card__cpu mono">{node.cpu_name}</span>
         </div>
 
         <StatGroup node={node} metrics={metrics} showUptime={showUptime} />

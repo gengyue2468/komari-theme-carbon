@@ -27,11 +27,19 @@
     format("woff2");
 }
 @font-face {
-  font-family: "IBM Plex Sans";
+  font-family: "IBM Plex Sans Condensed";
   font-style: normal;
-  font-weight: 700;
+  font-weight: 400;
   font-display: swap;
-  src: url("@ibm/plex/IBM-Plex-Sans/fonts/complete/woff2/IBMPlexSans-Bold.woff2")
+  src: url("@ibm/plex/IBM-Plex-Sans-Condensed/fonts/complete/woff2/IBMPlexSansCondensed-Regular.woff2")
+    format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans Condensed";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("@ibm/plex/IBM-Plex-Sans-Condensed/fonts/complete/woff2/IBMPlexSansCondensed-SemiBold.woff2")
     format("woff2");
 }
 @font-face {
@@ -46,15 +54,16 @@
 :root {
   @include theme(themes.$g10);
   --cds-font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --cds-charts-font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --cds-charts-font-family-condensed: "IBM Plex Sans Condensed", "Helvetica Neue", Arial, sans-serif;
   --container-max: 80rem;
   --container-pad: #{$spacing-05};
   --header-h: 3rem;
-  --carbon-data-down: #8a3ffc;
+  --carbon-data-down: var(--cds-text-secondary);
 }
 
 html[data-carbon-theme="g100"] {
   @include theme(themes.$g100);
-  --carbon-data-down: #a56eff;
 }
 
 /* Smooth programmatic scrolling (route changes scroll to top) */
@@ -91,6 +100,13 @@ body {
 .mono {
   font-family: "IBM Plex Mono", Menlo, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+/* Use aligned numerals without turning ordinary dashboard copy into code. */
+.numeric {
+  font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
 }
 
 /* Carbon blue hierarchy: primary interaction, status blue, and blue layers. */
@@ -429,7 +445,7 @@ body {
 .node-map__count {
   fill: #fff;
   font-family: "IBM Plex Mono", Menlo, monospace;
-  font-weight: 600;
+  font-weight: 400;
   pointer-events: none;
   user-select: none;
 }
@@ -600,21 +616,30 @@ body {
   flex-direction: column;
   justify-content: space-between;
   gap: $spacing-03;
+  border: 1px solid transparent;
 }
 
 .home-stat-card--clickable {
   cursor: pointer;
   width: 100%;
   height: 100%;
-  transition: background 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 
   &:hover {
     background: $layer-hover-01;
+    border-color: $border-subtle-01;
   }
 
   &:focus {
     outline: 2px solid $focus;
     outline-offset: -2px;
+  }
+
+  &[aria-expanded="true"] {
+    border-color: $border-subtle-01;
+    background: $layer-selected-01;
   }
 }
 
@@ -666,6 +691,7 @@ body {
 
 .finance-panel__value {
   @include type-style("productive-heading-02");
+  font-weight: 400;
   line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
@@ -756,6 +782,13 @@ body {
   color: $text-secondary;
 }
 
+.stat-popover__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-04;
+}
+
 .stat-popover__empty {
   @include type-style("body-compact-01");
   color: $text-secondary;
@@ -791,6 +824,7 @@ body {
 
 .stat-popover__value {
   @include type-style("productive-heading-01");
+  font-weight: 400;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -833,7 +867,7 @@ body {
 .home-stat-card__icon {
   color: $icon-secondary;
   flex-shrink: 0;
-  opacity: 0.45;
+  opacity: 0.55;
 }
 
 .home-stat-card__value-row {
@@ -845,6 +879,7 @@ body {
 
 .home-stat-card__value {
   @include type-style("productive-heading-04");
+  font-weight: 400;
   letter-spacing: -0.02em;
   line-height: 1;
 }
@@ -889,7 +924,7 @@ body {
   }
 }
 
-/* toolbar under stats: groups left · view/search right */
+/* toolbar under stats: groups left / view and search right */
 .home-toolbar {
   gap: $spacing-05;
   width: 100%;
@@ -1021,32 +1056,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 0 0 $spacing-05 0;
+  padding: 0 0 $spacing-04 0;
+  border: 1px solid transparent;
 }
 
 .node-card.is-offline {
-  border-inline-start: 0;
-}
-
-.node-card.is-offline::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  background:
-    linear-gradient($support-error, $support-error) 0 0 / $spacing-04 2px no-repeat,
-    linear-gradient($support-error, $support-error) 0 0 / 2px $spacing-04 no-repeat,
-    linear-gradient($support-error, $support-error) 100% 0 / $spacing-04 2px no-repeat,
-    linear-gradient($support-error, $support-error) 100% 0 / 2px $spacing-04 no-repeat,
-    linear-gradient($support-error, $support-error) 0 100% / $spacing-04 2px no-repeat,
-    linear-gradient($support-error, $support-error) 0 100% / 2px $spacing-04 no-repeat,
-    linear-gradient($support-error, $support-error) 100% 100% / $spacing-04 2px no-repeat,
-    linear-gradient($support-error, $support-error) 100% 100% / 2px $spacing-04 no-repeat;
+  border-inline-start: 2px solid $support-error;
 }
 
 .node-card.is-offline > .node-card__content {
-  opacity: 0.4;
+  opacity: 0.58;
 }
 
 .node-card.is-loading {
@@ -1055,6 +1074,7 @@ body {
 
 .node-card.cds--tile:hover {
   background: $layer-hover-01;
+  border-color: $border-subtle-01;
 }
 
 .node-card__overlay {
@@ -1081,8 +1101,9 @@ body {
   align-items: center;
   gap: $spacing-01;
   max-width: calc(100% - #{$spacing-05} - #{$spacing-05});
-  padding: $spacing-01 $spacing-02;
+  padding: $spacing-02 $spacing-03;
   background: $layer-01;
+  border-inline-start: 2px solid $support-error;
   color: $support-error;
   @include type-style("helper-text-01");
   line-height: 1.2;
@@ -1103,7 +1124,7 @@ body {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: $spacing-05;
+  gap: $spacing-04;
   min-width: 0;
   pointer-events: none;
 }
@@ -1121,7 +1142,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: $spacing-03;
-  padding: $spacing-05 $spacing-05 0;
+  padding: $spacing-04 $spacing-04 0;
 }
 
 .node-card__head-left {
@@ -1136,8 +1157,21 @@ body {
   flex-shrink: 0;
 }
 
+.node-card__status-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  background: $interactive;
+}
+
+.node-card__status-dot.is-loading {
+  background: $icon-secondary;
+}
+
 .node-card__title {
   @include type-style("productive-heading-02");
+  font-weight: 600;
   margin: 0;
   min-width: 0;
   overflow: hidden;
@@ -1145,7 +1179,16 @@ body {
   white-space: nowrap;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: $spacing-02;
+  width: 100%;
+}
+
+.node-card__title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .node-card__flag {
@@ -1161,9 +1204,18 @@ body {
   display: flex;
   align-items: center;
   gap: $spacing-03;
-  padding: 0 $spacing-05;
+  padding: 0 $spacing-04;
   min-width: 0;
   flex-wrap: nowrap;
+}
+
+.node-card__sub-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-03;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .node-card__badges {
@@ -1198,26 +1250,27 @@ body {
 
 .node-card__cpu {
   @include type-style("label-01");
+  font-weight: 400;
   color: $text-secondary;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-left: auto;
+  margin-left: 0;
   min-width: 0;
   flex: 1 1 auto;
-  text-align: right;
+  text-align: left;
 }
 
 /* --- Sections --- */
 
 .card-section {
-  padding: 0 $spacing-05;
+  padding: 0 $spacing-04;
   display: flex;
   flex-direction: column;
   gap: $spacing-03;
 
   & + .card-section {
-    padding-top: $spacing-04;
+    padding-top: $spacing-03;
     border-top: 1px solid $border-subtle-01;
   }
 }
@@ -1226,6 +1279,7 @@ body {
   @include type-style("label-01");
   margin: 0;
   color: $text-secondary;
+  font-weight: 600;
 }
 
 /* --- KV grid (CPU / RAM / Disk / Traffic) --- */
@@ -1233,7 +1287,7 @@ body {
 .card-kv-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: $spacing-04 $spacing-05;
+  gap: $spacing-03 $spacing-04;
 }
 
 .card-kv {
@@ -1261,6 +1315,7 @@ body {
 .card-kv__value {
   text-align: right;
   @include type-style("productive-heading-02");
+  font-weight: 400;
   line-height: 1.1;
   min-width: 0;
   overflow: hidden;
@@ -1345,11 +1400,17 @@ body {
   gap: $spacing-02;
 }
 
+.direction-label {
+  @include type-style("helper-text-01");
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
 .card-rate__up {
   color: $interactive;
 }
 
-/* Purple — distinct from interactive blue (was support-info, too close) */
+/* Keep the secondary direction neutral so blue remains the interaction color. */
 .card-rate__down {
   color: var(--carbon-data-down);
 }
@@ -1360,7 +1421,7 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: $spacing-02;
-  padding: 0 $spacing-05;
+  padding: 0 $spacing-04;
 }
 
 .card-ping-points {
@@ -1391,7 +1452,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: $text-primary;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .card-ping-point__strips,
@@ -1416,8 +1477,8 @@ body {
 .card-spark__track {
   display: flex;
   gap: 1px;
-  height: 0.5rem;
-  padding: 1px;
+  height: 0.4rem;
+  padding: 0;
   border-radius: 2px;
   background: $layer-accent-01;
 }
@@ -1436,11 +1497,11 @@ body {
 }
 
 .card-spark__cell.ping-bar__cell--good {
-  background: $interactive;
+  background: color-mix(in srgb, $interactive 82%, $layer-01);
 }
 
 .card-spark__cell.ping-bar__cell--ok {
-  background: color-mix(in srgb, $interactive 70%, $support-warning);
+  background: color-mix(in srgb, $interactive 58%, $support-warning);
 }
 
 .card-spark__cell.ping-bar__cell--fair {
@@ -1448,7 +1509,7 @@ body {
 }
 
 .card-spark__cell.ping-bar__cell--slow {
-  background: color-mix(in srgb, $support-warning 70%, $support-error);
+  background: color-mix(in srgb, $support-warning 72%, $support-error);
 }
 
 .card-spark__cell.ping-bar__cell--bad {
@@ -1591,11 +1652,12 @@ body {
 .table-icon-cell {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   vertical-align: middle;
   line-height: 0;
   min-width: 1.25rem;
   min-height: 1.25rem;
+  width: 100%;
 }
 
 /* Cell content helpers (not layout/width hacks) */
@@ -1647,6 +1709,17 @@ body {
   min-width: 0;
 }
 
+.table-name__link {
+  display: block;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.table-name__link:hover .table-name__text {
+  text-decoration: underline;
+}
+
 .table-name.is-dim {
   color: $text-secondary;
 }
@@ -1654,13 +1727,19 @@ body {
 .table-name__top {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: $spacing-02;
   min-width: 0;
+  width: 100%;
 }
 
 .table-name__text {
   @include type-style("body-compact-01");
   font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table-name__sub {
@@ -1690,6 +1769,7 @@ body {
 
 .table-metric__pct {
   @include type-style("helper-text-01");
+  font-weight: 400;
 }
 
 .table-metric__sub {
@@ -1794,7 +1874,7 @@ body {
 .detail {
   display: flex;
   flex-direction: column;
-  gap: $spacing-05;
+  gap: $spacing-06;
 }
 
 .detail-empty {
@@ -1844,11 +1924,36 @@ body {
   flex: 0 0 auto;
 }
 
+.detail-top__right {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: $spacing-03;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.detail-status-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  background: $interactive;
+}
+
+.detail-status-dot.is-loading {
+  background: $icon-secondary;
+}
+
+.detail-status-dot.is-offline {
+  background: $support-error;
+}
+
 .detail-remark {
   margin: 0;
-  padding: $spacing-04 $spacing-05;
+  padding: $spacing-03 $spacing-04;
   background: $layer-01;
-  border-inline-start: 3px solid $interactive;
+  border-inline-start: 2px solid $interactive;
   @include type-style("body-compact-01");
   color: $text-secondary;
   white-space: pre-wrap;
@@ -1857,9 +1962,9 @@ body {
 
 .detail-agent-message {
   margin: 0;
-  padding: $spacing-04 $spacing-05;
+  padding: $spacing-03 $spacing-04;
   background: $layer-01;
-  border-inline-start: 3px solid $support-warning;
+  border-inline-start: 2px solid $support-warning;
   @include type-style("body-compact-01");
   color: $text-primary;
   white-space: pre-wrap;
@@ -1874,6 +1979,7 @@ body {
 
 .detail-title {
   @include type-style("productive-heading-03");
+  font-weight: 600;
   margin: 0;
   display: flex;
   align-items: center;
@@ -1913,12 +2019,12 @@ body {
 .detail-finance-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: $spacing-05;
+  gap: $spacing-04;
 }
 
 .detail-metric-card.cds--tile {
-  min-height: 5.5rem;
-  padding: $spacing-05;
+  min-height: 6rem;
+  padding: $spacing-04;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1943,6 +2049,7 @@ body {
 
 .detail-metric-card__value {
   @include type-style("productive-heading-03");
+  font-weight: 400;
   line-height: 1.1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1995,7 +2102,7 @@ body {
 .detail-live-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: $spacing-05;
+  gap: $spacing-04;
 }
 
 /* With a GPU card there are 5 live cells — widen to 5 cols so no row is partial */
@@ -2006,11 +2113,11 @@ body {
 .detail-info-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: $spacing-05;
+  gap: $spacing-04;
 }
 
 .detail-section.cds--tile {
-  padding: $spacing-05;
+  padding: $spacing-04;
   display: flex;
   flex-direction: column;
   gap: $spacing-04;
@@ -2020,7 +2127,8 @@ body {
 .detail-section__title {
   @include type-style("heading-compact-01");
   margin: 0;
-  color: $text-secondary;
+  color: $text-primary;
+  font-weight: 600;
 }
 
 .detail-info-cells {
@@ -2043,7 +2151,7 @@ body {
   min-width: 0;
   background: color-mix(in srgb, $text-primary 4%, transparent);
   border: none;
-  padding: $spacing-04;
+  padding: $spacing-03;
   display: flex;
   flex-direction: column;
   gap: $spacing-02;
@@ -2057,9 +2165,12 @@ body {
 .detail-info-cell__label {
   display: inline-flex;
   align-items: center;
+  justify-content: space-between;
   gap: $spacing-02;
+  width: 100%;
   color: $text-secondary;
   @include type-style("label-01");
+  letter-spacing: 0.04em;
   min-width: 0;
 }
 
@@ -2107,11 +2218,14 @@ body {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
   gap: $spacing-03;
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
 }
 
 /* Emerald-style: usage as background fill inside the traffic cell */
 .detail-info-cell--traffic {
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .detail-traffic-fill {
@@ -2133,13 +2247,30 @@ body {
 }
 
 .detail-traffic-ud {
+  display: inline-flex;
+  align-items: baseline;
+  gap: $spacing-03;
   margin-inline-start: auto;
   @include type-style("helper-text-01");
   color: $text-secondary;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 55%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.detail-traffic-ud__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: $spacing-01;
+  min-width: 0;
+}
+
+.detail-traffic-ud__label {
+  color: $text-primary;
+  font-weight: 400;
+  letter-spacing: 0.04em;
 }
 
 .detail-traffic-pct {
@@ -2149,9 +2280,10 @@ body {
 
 .rate-pair {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: $spacing-04;
+  gap: $spacing-03;
+  white-space: nowrap;
 }
 
 .rate-pair__up {
@@ -2217,11 +2349,13 @@ body {
   gap: $spacing-03;
   min-width: 0;
   background: $layer-01;
+  border: 1px solid transparent;
   cursor: pointer;
   transition: background 0.15s ease;
 
   &:hover {
     background: $layer-02;
+    border-color: $border-subtle-01;
   }
 
   &:focus-visible {
@@ -2241,6 +2375,7 @@ body {
 .load-chart-card__title {
   @include type-style("productive-heading-01");
   margin: 0;
+  font-weight: 600;
 }
 
 .load-chart-card__meta {
@@ -2310,7 +2445,7 @@ body {
 .ping-chart-panel {
   display: flex;
   flex-direction: column;
-  gap: $spacing-05;
+  gap: $spacing-04;
   scroll-margin-top: calc(var(--header-h) + #{$spacing-05});
 }
 
@@ -2347,7 +2482,7 @@ body {
 .ping-task-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: $spacing-03;
+  gap: $spacing-02;
 }
 
 .ping-task-card {
@@ -2356,7 +2491,7 @@ body {
   gap: 0;
   margin: 0;
   padding: 0;
-  border: 1px solid $border-subtle-01;
+  border: 1px solid transparent;
   background: $layer-01;
   text-align: left;
   cursor: pointer;
@@ -2368,16 +2503,18 @@ body {
 }
 
 .ping-task-card:hover {
-  border-color: $border-strong-01;
+  border-color: $border-subtle-01;
   background: $layer-hover-01;
 }
 
 .ping-task-card.is-dim {
-  opacity: 0.35;
+  opacity: 0.48;
 }
 
 .ping-task-card.is-active {
   opacity: 1;
+  border-color: $border-subtle-01;
+  background: $layer-selected-01;
 }
 
 .ping-task-card__bar {
@@ -2412,6 +2549,7 @@ body {
 
 .ping-task-card__latest {
   @include type-style("productive-heading-01");
+  font-weight: 400;
   flex-shrink: 0;
 }
 
@@ -2429,9 +2567,10 @@ body {
 }
 
 .ping-chart-main.cds--tile {
-  padding: $spacing-05;
+  padding: $spacing-04;
   background: $layer-01;
   min-width: 0;
+  border: 1px solid transparent;
 }
 
 .ping-chart-main.is-interactive {

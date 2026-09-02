@@ -13,6 +13,7 @@ import { buildPingChartModel, formatLatencyMs } from "~/lib/ping-display";
 import { PageSpinner } from "~/components/PageSpinner";
 import {
   buildChartLocale,
+  formatChartTime,
   makeTooltipValueFormatter,
 } from "~/lib/chart-i18n";
 import { queryKeys } from "~/lib/query-client";
@@ -299,7 +300,10 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
           domain: chartTimeDomain
             ? [new Date(chartTimeDomain.start), new Date(chartTimeDomain.end)]
             : undefined,
-          ticks: { number: 10 },
+          ticks: {
+            number: 10,
+            formatter: (tick: number | Date) => formatChartTime(language, tick),
+          },
           title: t("chart.time"),
         },
         left: {
@@ -425,11 +429,11 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
           <div className="ping-task-card__body">
             <div className="ping-task-card__top">
               <span className="ping-task-card__name">{task.name}</span>
-              <span className="ping-task-card__latest mono">
+              <span className="ping-task-card__latest numeric">
                 {formatLatencyMs(task.latest)}
               </span>
             </div>
-            <div className="ping-task-card__stats mono">
+            <div className="ping-task-card__stats numeric">
               <span>
                 {t("detail.avg")} {formatLatencyMs(task.avg)}
               </span>
@@ -440,7 +444,7 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
                 <span className="ping-task-card__meta">
                   {[task.type, task.interval ? `${task.interval}s` : ""]
                     .filter(Boolean)
-                    .join(" · ")}
+                    .join(" / ")}
                 </span>
               ) : null}
             </div>
@@ -453,7 +457,7 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
   return (
     <div id="ping-chart" className="ping-chart-panel">
       {!realtimeReady ? (
-        <p className="ping-chart-panel__offline mono">{t("app.statusLoading")}</p>
+        <p className="ping-chart-panel__offline">{t("app.statusLoading")}</p>
       ) : null}
       {renderToolbar()}
 

@@ -26,8 +26,8 @@ export function buildChartLocale(
 }
 
 /**
- * One time format for the tooltip date row so charts never disagree:
- * "MM-DD HH:mm" (localized). Axis ticks keep Carbon's adaptive auto-format.
+ * One time format for tooltip date rows and axis ticks so charts never
+ * disagree: "MM-DD HH:mm" (localized), without seconds.
  */
 const CHART_TIME_OPTS: Intl.DateTimeFormatOptions = {
   month: "2-digit",

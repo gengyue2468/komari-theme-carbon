@@ -14,6 +14,7 @@ import { dataSource } from "~/api/datasource";
 import { PageSpinner } from "~/components/PageSpinner";
 import {
   buildChartLocale,
+  formatChartTime,
   makeTooltipValueFormatter,
 } from "~/lib/chart-i18n";
 import {
@@ -178,7 +179,11 @@ function baseChartOptions(
       bottom: {
         mapsTo: "date",
         scaleType: ScaleTypes.TIME,
-        ticks: { number: 8 },
+        ticks: {
+          number: 8,
+          formatter: (tick: number | Date) =>
+            formatChartTime(locale?.code ?? "en", tick),
+        },
         title: timeTitle,
       },
       left: {
@@ -247,7 +252,7 @@ function MetricChart({
     >
       <div className="load-chart-card__head">
         <span className="load-chart-card__title">{title}</span>
-        {meta ? <span className="load-chart-card__meta mono">{meta}</span> : null}
+        {meta ? <span className="load-chart-card__meta">{meta}</span> : null}
       </div>
       <div className="load-chart-card__body">
         {data.length === 0 ? (
@@ -465,12 +470,12 @@ export function LoadChart({ uuid }: LoadChartProps) {
     for (const r of series) {
       const d = new Date(r.time);
       points.push({
-        group: t("metrics.upload"),
+        group: t("metrics.outbound"),
         date: d,
         value: r.net_out,
       });
       points.push({
-        group: t("metrics.download"),
+        group: t("metrics.inbound"),
         date: d,
         value: r.net_in,
       });
@@ -604,7 +609,11 @@ export function LoadChart({ uuid }: LoadChartProps) {
         bottom: {
           mapsTo: "date",
           scaleType: ScaleTypes.TIME,
-          ticks: { number: 8 },
+          ticks: {
+            number: 8,
+            formatter: (tick: number | Date) =>
+              formatChartTime(chartLocale.code ?? "en", tick),
+          },
           title: timeTitle,
         },
         left: {
@@ -626,8 +635,8 @@ export function LoadChart({ uuid }: LoadChartProps) {
       height: "200px",
       color: {
         scale: {
-          [t("metrics.upload")]: COLOR_UP,
-          [t("metrics.download")]: COLOR_DOWN,
+          [t("metrics.outbound")]: COLOR_UP,
+          [t("metrics.inbound")]: COLOR_DOWN,
         },
       },
       tooltip: { valueFormatter: rateFormatter },
@@ -648,7 +657,11 @@ export function LoadChart({ uuid }: LoadChartProps) {
         bottom: {
           mapsTo: "date",
           scaleType: ScaleTypes.TIME,
-          ticks: { number: 8 },
+          ticks: {
+            number: 8,
+            formatter: (tick: number | Date) =>
+              formatChartTime(chartLocale.code ?? "en", tick),
+          },
           title: timeTitle,
         },
         left: {
@@ -695,36 +708,40 @@ export function LoadChart({ uuid }: LoadChartProps) {
     },
     ram: {
       title: t("metrics.ram"),
-      meta: latest?.ram != null
-        ? `${formatBytes(latest.ram)} · ${formatBytes(latest.ram_total ?? 0)}`
-        : undefined,
+      meta:
+        latest?.ram != null
+          ? `${formatBytes(latest.ram)} / ${formatBytes(latest.ram_total ?? 0)}`
+          : undefined,
       data: ramData,
       options: ramOpts,
       kind: "area",
     },
     disk: {
       title: t("metrics.disk"),
-      meta: latest?.disk != null
-        ? `${formatBytes(latest.disk)} · ${formatBytes(latest.disk_total ?? 0)}`
-        : undefined,
+      meta:
+        latest?.disk != null
+          ? `${formatBytes(latest.disk)} / ${formatBytes(latest.disk_total ?? 0)}`
+          : undefined,
       data: diskData,
       options: diskOpts,
       kind: "area",
     },
     network: {
       title: t("metrics.network"),
-      meta: latest?.net_out != null && latest.net_in != null
-        ? `${formatRate(latest.net_out)} ↑ · ${formatRate(latest.net_in)} ↓`
-        : undefined,
+      meta:
+        latest?.net_out != null && latest.net_in != null
+          ? `${t("metrics.outbound")} ${formatRate(latest.net_out)} / ${t("metrics.inbound")} ${formatRate(latest.net_in)}`
+          : undefined,
       data: netData,
       options: netOpts,
       kind: "line",
     },
     connections: {
       title: t("metrics.connections"),
-      meta: latest?.connections != null && latest.connections_udp != null
-        ? `TCP ${latest.connections} · UDP ${latest.connections_udp}`
-        : undefined,
+      meta:
+        latest?.connections != null && latest.connections_udp != null
+          ? `TCP ${latest.connections} / UDP ${latest.connections_udp}`
+          : undefined,
       data: connData,
       options: connOpts,
       kind: "line",

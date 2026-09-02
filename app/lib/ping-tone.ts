@@ -1,4 +1,4 @@
-/** Distinct hues: blue / purple / amber / violet / orange / magenta */
+/** Distinct Carbon data hues for separately identified monitoring series. */
 export const PING_TASK_COLORS = [
   "var(--cds-interactive)",
   "var(--carbon-data-down)",
@@ -10,17 +10,17 @@ export const PING_TASK_COLORS = [
 
 /**
  * Unified identity colors for the three Chinese ISPs across latency charts:
- * 电信 CT / 联通 CU / 移动 CM. No green — 移动 uses purple.
+ * 电信 CT / 联通 CU / 移动 CM. Blue / red / neutral for quick scanning.
  */
 export const ISP_COLORS: Record<"CT" | "CU" | "CM", string> = {
   CT: "var(--cds-interactive)", // 电信 — blue
   CU: "var(--cds-support-error)", // 联通 — red
-  CM: "var(--carbon-data-down)", // 移动 — purple
+  CM: "var(--carbon-data-down)", // 移动 — neutral
 };
 
 /** Upload / primary series */
 export const COLOR_UP = "var(--cds-interactive)";
-/** Download / secondary — purple, not near-blue support-info */
+/** Download / secondary — neutral */
 export const COLOR_DOWN = "var(--carbon-data-down)";
 
 export function latencyToneClass(ms: number): string {

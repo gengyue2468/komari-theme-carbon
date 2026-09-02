@@ -51,8 +51,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export function HydrateFallback() {
+  const { t } = useTranslation();
   return (
-    <div className="hydrate-fallback" role="status" aria-label="Loading…">
+    <div className="hydrate-fallback" role="status" aria-label={t("app.loading")}>
       <Loading small withOverlay={false} />
     </div>
   );
@@ -71,15 +72,15 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const loading = useNodesStore((s) => s.loading);
   const bootstrap = useNodesStore((s) => s.bootstrap);
   const revalidator = useRevalidator();
-  let title = "Error";
-  let subtitle = "An unexpected error occurred.";
+  let title = t("app.errorTitle");
+  let subtitle = t("app.unexpectedError");
 
   if (isRouteErrorResponse(error)) {
     if (error.status === 404) {
       title = "404";
-      subtitle = "The requested page could not be found.";
+      subtitle = t("app.notFoundError");
     } else {
-      title = `Error ${error.status}`;
+      title = t("app.errorStatus", { status: error.status });
       subtitle = error.statusText || String(error.data) || subtitle;
     }
   } else if (error instanceof Error) {

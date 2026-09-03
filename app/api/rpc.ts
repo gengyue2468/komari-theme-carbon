@@ -464,8 +464,8 @@ export interface RpcPingTaskInfo {
   p99_p50_ratio?: number;
 }
 
-export async function rpcPing(): Promise<string> {
-  return getRpc().call<string>("rpc.ping");
+export async function rpcPing(signal?: AbortSignal): Promise<string> {
+  return getRpc().call<string>("rpc.ping", {}, DEFAULT_RPC_TIMEOUT_MS, signal);
 }
 
 export async function rpcGetNodes(
@@ -481,13 +481,17 @@ export async function rpcGetNodes(
   return (result as Record<string, RpcClientInfo>) ?? {};
 }
 
-export async function rpcGetNodesLatestStatus(): Promise<
+export async function rpcGetNodesLatestStatus(
+  signal?: AbortSignal,
+): Promise<
   Record<string, RpcNodeStatus>
 > {
   return (
     (await getRpc().call<Record<string, RpcNodeStatus>>(
       "common:getNodesLatestStatus",
       {},
+      DEFAULT_RPC_TIMEOUT_MS,
+      signal,
     )) ?? {}
   );
 }

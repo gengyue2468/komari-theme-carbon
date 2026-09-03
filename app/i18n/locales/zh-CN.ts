@@ -29,6 +29,7 @@ export default {
     unexpectedError: "发生未知错误。",
     notFoundError: "请求的页面不存在。",
     errorStatus: "错误 {{status}}",
+    moreInfo: "更多信息",
   },
   map: {
     title: "节点分布",
@@ -138,6 +139,15 @@ export default {
     swap: "内存交换",
     lastSeen: "最后上报",
     recordsDisabled: "服务端未启用历史记录",
+    pingPointInfo: "查看 {{name}} 详情",
+    pingWindow: "近 {{hours}} 小时均值",
+    pingLatest: "最近一次上报值",
+    pingAssessment: {
+      stable: "延迟和丢包整体稳定。",
+      highLatency: "延迟偏高，可能受到链路距离或拥塞影响。",
+      packetLoss: "丢包偏高，当前链路可能不稳定。",
+      unavailable: "该时间窗口内没有有效延迟样本。",
+    },
   },
   time: {
     days: "{{count}} 天",

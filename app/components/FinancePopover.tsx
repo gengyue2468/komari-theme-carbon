@@ -34,17 +34,26 @@ export function FinancePopover({ nodes, label }: FinancePopoverProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Load exchange rates up-front (cached today's rates are applied
-    // synchronously via readStoredRates). Fetching on mount keeps the value
-    // on the card identical to the one shown after the popover opens.
+    if (!open) return;
     let cancelled = false;
-    void getDailyExchangeRates().then((r) => {
-      if (!cancelled) setRates(r);
-    });
+    const load = () => {
+      void getDailyExchangeRates().then((r) => {
+        if (!cancelled) setRates(r);
+      });
+    };
+    let idleId: number | null = null;
+    let timeoutId: number | null = null;
+    if (typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(load, { timeout: 1_000 });
+    } else {
+      timeoutId = window.setTimeout(load, 0);
+    }
     return () => {
       cancelled = true;
+      if (idleId != null) window.cancelIdleCallback(idleId);
+      if (timeoutId != null) window.clearTimeout(timeoutId);
     };
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

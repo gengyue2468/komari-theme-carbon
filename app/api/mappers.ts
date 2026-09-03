@@ -158,7 +158,10 @@ const metricsCache = new Map<
 >();
 
 function statusFingerprint(s: RpcNodeStatus): string {
-  return JSON.stringify(s);
+  // Server timestamps change on every poll even when the displayed metrics do
+  // not. Excluding it keeps the cached metrics reference stable between polls.
+  const { time: _time, ...stableStatus } = s;
+  return JSON.stringify(stableStatus);
 }
 
 function mapStatusToMetricsCached(

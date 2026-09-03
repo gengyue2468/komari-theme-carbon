@@ -1,5 +1,6 @@
 import { Modal, Tab, TabList, Tabs, Tile } from "@carbon/react";
 import { AreaChart, LineChart } from "@carbon/charts-react";
+import "@carbon/charts/styles.css";
 import {
   Alignments,
   ScaleTypes,
@@ -8,10 +9,10 @@ import {
   type Locale,
 } from "@carbon/charts";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dataSource } from "~/api/datasource";
-import { PageSpinner } from "~/components/PageSpinner";
+import { ChartPlaceholder } from "~/components/ChartPlaceholder";
 import {
   buildChartLocale,
   formatChartTime,
@@ -235,18 +236,18 @@ function MetricChart({
   options,
   kind = "line",
   onOpen,
-}: MetricChartData & { onOpen: () => void }) {
+}: MetricChartData & { onOpen: (launcher: HTMLElement) => void }) {
   return (
     <Tile
       className="load-chart-card"
       role="button"
       tabIndex={0}
       aria-label={title}
-      onClick={onOpen}
+      onClick={(event) => onOpen(event.currentTarget)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onOpen();
+          onOpen(e.currentTarget);
         }
       }}
     >
@@ -354,7 +355,19 @@ export function LoadChart({ uuid }: LoadChartProps) {
     writeStoredRange(key);
   };
   const [dialogMetric, setDialogMetric] = useState<MetricId | null>(null);
+  const dialogLauncherRef = useRef<HTMLElement | null>(null);
+  const dialogWasOpenRef = useRef(false);
   const pollMs = useNodesStore((s) => s.pollIntervalMs);
+
+  useEffect(() => {
+    const wasOpen = dialogWasOpenRef.current;
+    dialogWasOpenRef.current = dialogMetric !== null;
+    if (!wasOpen || dialogMetric !== null) return;
+    const frame = window.requestAnimationFrame(() => {
+      dialogLauncherRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [dialogMetric]);
 
   const hours =
     availableRanges.find((r) => r.key === range)?.hours ??
@@ -782,7 +795,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
       </div>
 
       {loading ? (
-        <PageSpinner />
+        <ChartPlaceholder />
       ) : loadQuery.isError && !loadQuery.data ? (
         <p className="empty" role="alert">{t("detail.loadDataError")}</p>
       ) : series.length === 0 ? (
@@ -796,7 +809,10 @@ export function LoadChart({ uuid }: LoadChartProps) {
               <MetricChart
                 key={id}
                 {...chart}
-                onOpen={() => setDialogMetric(id)}
+                onOpen={(launcher) => {
+                  dialogLauncherRef.current = launcher;
+                  setDialogMetric(id);
+                }}
               />
             );
           })}
@@ -823,7 +839,7 @@ export function LoadChart({ uuid }: LoadChartProps) {
           </div>
           <div className="load-chart-dialog__chart">
             {loading ? (
-              <PageSpinner />
+              <ChartPlaceholder />
             ) : dialogChart.data.length === 0 ? (
               <div className="load-chart-card__empty">—</div>
             ) : dialogChart.kind === "area" ? (

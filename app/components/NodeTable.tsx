@@ -13,6 +13,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { QuickIcon } from "~/components/BrandIcon";
+import { InfoTip, PingPointInfo } from "~/components/InfoTip";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
   formatBytes,
@@ -25,14 +26,13 @@ import {
 } from "~/lib/format";
 import { getArchIcon, getOsIcon } from "~/lib/os-arch";
 import {
-  buildNodePingHistorySummary,
   formatLatencyMs,
+  type NodePingHistorySummary,
   selectPingNetworks,
 } from "~/lib/ping-display";
 import { formatPriceWithCycle } from "~/lib/finance";
 import type {
   NodeInfo,
-  PingHistoryResponse,
   RealtimeMetrics,
 } from "~/types/komari";
 
@@ -41,7 +41,7 @@ interface NodeTableProps {
   onlineIds: string[];
   realtimeReady: boolean;
   realtime: Record<string, RealtimeMetrics>;
-  pingHistory?: PingHistoryResponse;
+  pingSummaries: ReadonlyMap<string, NodePingHistorySummary>;
 }
 
 function MiniBar({ pct }: { pct: number | null }) {
@@ -79,7 +79,7 @@ export function NodeTable({
   onlineIds,
   realtimeReady,
   realtime,
-  pingHistory,
+  pingSummaries,
 }: NodeTableProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -153,8 +153,8 @@ export function NodeTable({
           _netDown: m ? formatRate(m.network.down) : "—",
           _uptime: m ? formatUptimeWithFormat(m.uptime, "minute") : "—",
           _price: price,
-          _nets: (() => {
-            const history = buildNodePingHistorySummary(pingHistory, n.uuid);
+           _nets: (() => {
+             const history = pingSummaries.get(n.uuid);
             return history
               ? {
                   visible: history.networks.slice(0, 3),
@@ -164,7 +164,7 @@ export function NodeTable({
           })(),
         };
       }),
-    [nodes, onlineSet, realtime, realtimeReady, t, pingHistory],
+    [nodes, onlineSet, realtime, realtimeReady, t, pingSummaries],
   );
 
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
@@ -373,11 +373,21 @@ export function NodeTable({
                                 key={point.id}
                                 className="table-ping-cell__line"
                               >
-                                <span
-                                  className="table-ping-cell__name"
-                                  title={point.name}
-                                >
-                                  {point.name || point.id}
+                                <span className="table-ping-cell__name">
+                                  <span className="table-ping-cell__name-text">
+                                    {point.name || point.id}
+                                  </span>
+                                  <InfoTip
+                                    label={t("detail.pingPointInfo", {
+                                      name: point.name || point.id,
+                                    })}
+                                    description={
+                                      <PingPointInfo
+                                        point={point}
+                                         hasHistory={pingSummaries.has(d.id)}
+                                      />
+                                    }
+                                  />
                                 </span>
                                  <span className="table-ping-cell__metric numeric">
                                    {formatLatencyMs(point.latencyMs)}

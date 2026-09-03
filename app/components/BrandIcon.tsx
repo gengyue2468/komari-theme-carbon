@@ -1,3 +1,4 @@
+import { Tooltip } from "@carbon/react";
 import type { CarbonIconType } from "@carbon/icons-react";
 import type { CSSProperties } from "react";
 import { BRAND_ICON_PATHS } from "~/lib/brand-icons";
@@ -52,10 +53,19 @@ export function QuickIcon({
     verticalAlign: "middle",
   };
 
-  if (icon.kind === "brand") {
+  const content = (() => {
+    if (icon.kind !== "brand") {
+      const Icon = icon.Icon as CarbonIconType;
+      return (
+        <span className={`brand-icon ${className ?? ""}`.trim()} style={boxStyle}>
+          <Icon size={size} className="brand-icon__glyph" aria-hidden />
+        </span>
+      );
+    }
+
     const d = BRAND_ICON_PATHS[icon.id];
     return (
-      <span className={`brand-icon ${className ?? ""}`.trim()} style={boxStyle} title={title}>
+      <span className={`brand-icon ${className ?? ""}`.trim()} style={boxStyle}>
         {d ? (
           <svg
             viewBox="0 0 24 24"
@@ -72,12 +82,13 @@ export function QuickIcon({
         ) : null}
       </span>
     );
-  }
+  })();
 
-  const Icon = icon.Icon as CarbonIconType;
-  return (
-    <span className={`brand-icon ${className ?? ""}`.trim()} style={boxStyle} title={title}>
-      <Icon size={size} className="brand-icon__glyph" aria-hidden />
-    </span>
+  return title ? (
+    <Tooltip as="span" label={title} align="top">
+      {content}
+    </Tooltip>
+  ) : (
+    content
   );
 }

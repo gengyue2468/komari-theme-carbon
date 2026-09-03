@@ -1,15 +1,16 @@
-import { Tag, Tile } from "@carbon/react";
+import { Tag, Tile, Tooltip } from "@carbon/react";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
-  buildNodePingHistorySummary,
   cardPingFromMetrics,
   formatLatencyMs,
+  type NodePingHistorySummary,
   selectPingNetworks,
 } from "~/lib/ping-display";
 import { barToneClass } from "~/lib/ping-tone";
 import { QuickIcon } from "~/components/BrandIcon";
+import { InfoTip, PingPointInfo } from "~/components/InfoTip";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
   formatBytes,
@@ -25,7 +26,6 @@ import { getArchIcon, getOsIcon, getVirtIcon } from "~/lib/os-arch";
 import { formatPriceWithCycle } from "~/lib/finance";
 import type {
   NodeInfo,
-  PingHistoryResponse,
   RealtimeMetrics,
 } from "~/types/komari";
 
@@ -34,7 +34,7 @@ interface NodeCardProps {
   online: boolean;
   realtimeReady: boolean;
   metrics?: RealtimeMetrics;
-  pingHistory?: PingHistoryResponse;
+  pingSummary?: NodePingHistorySummary;
   lastSeenAt?: string;
   showUptime?: boolean;
 }
@@ -63,7 +63,7 @@ function Kv({
   hint,
   pct,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: string;
   unit?: string;
   hint?: string;
@@ -72,7 +72,9 @@ function Kv({
   return (
     <div className="card-kv">
       <div className="card-kv__head">
-        <span className="card-kv__label">{label}</span>
+        <span className="card-kv__label">
+          {label}
+        </span>
         {(value || unit) && (
           <span className="card-kv__value numeric">
             {value}
@@ -248,21 +250,18 @@ function StatGroup({ node, metrics, showUptime }: Pick<NodeCardProps, "node" | "
 function SectionPing({
   nodeUuid,
   metrics,
-  pingHistory,
+  pingSummary,
   realtimeReady,
   onOpenMore,
 }: {
   nodeUuid: string;
   metrics?: RealtimeMetrics;
-  pingHistory?: PingHistoryResponse;
+  pingSummary?: NodePingHistorySummary;
   realtimeReady: boolean;
   onOpenMore: () => void;
 }) {
   const { t } = useTranslation();
-  const historySummary = useMemo(
-    () => buildNodePingHistorySummary(pingHistory, nodeUuid),
-    [pingHistory, nodeUuid],
-  );
+  const historySummary = pingSummary;
   const ping = historySummary
     ? {
         visible: historySummary.networks.slice(0, 3),
@@ -281,8 +280,16 @@ function SectionPing({
           {ping.visible.map((point) => (
             <div className="card-ping-point" key={point.id}>
               <div className="card-ping-point__head">
-                <span className="card-ping-point__name" title={point.name}>
-                  {point.name || point.id}
+                <span className="card-ping-point__name">
+                  <span className="card-ping-point__name-text">
+                    {point.name || point.id}
+                  </span>
+                  <InfoTip
+                    label={t("detail.pingPointInfo", { name: point.name || point.id })}
+                    description={
+                      <PingPointInfo point={point} hasHistory={historySummary != null} />
+                    }
+                  />
                 </span>
               </div>
               <div className="card-ping-point__strips">
@@ -351,7 +358,7 @@ export const NodeCard = memo(
     online,
     realtimeReady,
     metrics,
-    pingHistory,
+    pingSummary,
     lastSeenAt,
     showUptime,
   }: NodeCardProps) {
@@ -395,12 +402,17 @@ export const NodeCard = memo(
           </div>
           <div className="node-card__head-right">
             {!realtimeReady || online ? (
-              <span
-                className={`node-card__status-dot${!realtimeReady ? " is-loading" : ""}`}
-                role="status"
-                aria-label={!realtimeReady ? t("app.statusLoading") : t("app.online")}
-                title={!realtimeReady ? t("app.statusLoading") : t("app.online")}
-              />
+              <Tooltip
+                as="span"
+                label={!realtimeReady ? t("app.statusLoading") : t("app.online")}
+                align="top"
+              >
+                <span
+                  className={`node-card__status-dot${!realtimeReady ? " is-loading" : ""}`}
+                  role="status"
+                  aria-label={!realtimeReady ? t("app.statusLoading") : t("app.online")}
+                />
+              </Tooltip>
             ) : null}
           </div>
         </div>
@@ -424,7 +436,7 @@ export const NodeCard = memo(
         <SectionPing
           nodeUuid={node.uuid}
           metrics={metrics}
-          pingHistory={pingHistory}
+           pingSummary={pingSummary}
           realtimeReady={realtimeReady}
           onOpenMore={() => navigate(`/node/${node.uuid}#ping-chart`)}
         />
@@ -449,5 +461,5 @@ export const NodeCard = memo(
     prev.showUptime === next.showUptime &&
     prev.node === next.node &&
     prev.metrics === next.metrics &&
-    prev.pingHistory === next.pingHistory,
+    prev.pingSummary === next.pingSummary,
 );

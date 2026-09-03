@@ -29,6 +29,7 @@ export default {
     unexpectedError: "An unexpected error occurred.",
     notFoundError: "The requested page could not be found.",
     errorStatus: "Error {{status}}",
+    moreInfo: "More information",
   },
   map: {
     title: "Node map",
@@ -138,6 +139,15 @@ export default {
     swap: "Swap",
     lastSeen: "Last seen",
     recordsDisabled: "Historical records are disabled on this server",
+    pingPointInfo: "Details for {{name}}",
+    pingWindow: "Recent {{hours}}h average",
+    pingLatest: "Latest reported sample",
+    pingAssessment: {
+      stable: "Latency and packet loss look stable.",
+      highLatency: "Latency is high; distance or congestion may be affecting the route.",
+      packetLoss: "Packet loss is elevated; the route may be unstable.",
+      unavailable: "No valid latency sample was recorded in this window.",
+    },
   },
   time: {
     days: "{{count}}d",

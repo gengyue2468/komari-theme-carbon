@@ -15,8 +15,12 @@ export type DensityMode = "comfortable" | "compact";
 
 function readViewMode(fallback: ViewMode): ViewMode {
   if (typeof window === "undefined") return fallback;
-  const v = localStorage.getItem(VIEW_KEY);
-  if (v === "grid" || v === "table") return v;
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    if (v === "grid" || v === "table") return v;
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts.
+  }
   return fallback;
 }
 
@@ -79,7 +83,7 @@ export const useNodesStore = create<NodesState>((set, get) => ({
   error: null,
   search: "",
   group: "all",
-  viewMode: "grid",
+  viewMode: readViewMode("grid"),
   showUptime: true,
   chartHours: 4,
   density: "comfortable",
@@ -105,34 +109,20 @@ export const useNodesStore = create<NodesState>((set, get) => ({
       const previousMode = get().publicSettings?.theme_settings.rpcTransportMode;
       getRpc().setTransport(previousMode === "websocket");
 
-      // Match Emerald's startup contract: verify RPC before loading the page.
-      try {
-        const response = await rpcPing();
-        if (response !== "pong") {
-          throw new Error("Unexpected health check response");
-        }
-      } catch (e) {
-        if (
-          (e instanceof RpcError && e.code === 401) ||
-          (e instanceof Error && /401|unauthorized|private/i.test(e.message))
-        ) {
-          window.location.href = "/admin";
-        }
-        throw e;
-      }
-
-      // Public settings and login state are non-critical for the node list.
-      let publicSettings: PublicSettings | null = null;
-      try {
-        publicSettings = await dataSource.getPublic(controller.signal);
-      } catch (e) {
-        if (controller.signal.aborted) throw e;
-      }
-      try {
-        await dataSource.getMe();
-      } catch {
-        // Login state is not required to render public node data.
-      }
+       // These requests are independent. Keep login state and the health check
+       // off the critical path while public settings establish the transport.
+       const publicPromise = dataSource.getPublic(controller.signal).catch((e) => {
+         if (controller.signal.aborted) throw e;
+         return null;
+       });
+       const mePromise = dataSource.getMe().catch(() => null);
+       const pingPromise = rpcPing(controller.signal)
+         .then((response) => {
+           if (response !== "pong") throw new Error("Unexpected health check response");
+           return null;
+         })
+         .catch((e) => e);
+       const publicSettings = await publicPromise;
 
       if (
         controller.signal.aborted ||
@@ -159,10 +149,22 @@ export const useNodesStore = create<NodesState>((set, get) => ({
       const chartHours = asNumber(settings.defaultChartHours, 4, 1, 168);
       const density = resolveDensity(settings);
 
-      const [nodes, snapshot] = await Promise.all([
-        dataSource.getNodes(),
-        dataSource.getRealtimeSnapshot(),
-      ]);
+       const [nodes, snapshot] = await Promise.all([
+         dataSource.getNodes(controller.signal),
+         dataSource.getRealtimeSnapshot(controller.signal),
+       ]);
+
+       const pingError = await pingPromise;
+       if (pingError) {
+         if (
+           (pingError instanceof RpcError && pingError.code === 401) ||
+           (pingError instanceof Error && /401|unauthorized|private/i.test(pingError.message))
+         ) {
+           window.location.href = "/admin";
+         }
+         throw pingError;
+       }
+       void mePromise;
 
       set({
         publicSettings,
@@ -211,63 +213,42 @@ export const useNodesStore = create<NodesState>((set, get) => ({
       };
       document.addEventListener("visibilitychange", onVisibilityChange);
 
-      const baseUnsub = dataSource.subscribeRealtime(
-        (snap) => {
-          if (stopped) return;
-          // Only publish when something actually changed (metrics are cached
-          // by reference in the mapper) so quiet ticks don't re-render the
-          // whole list every poll interval.
-          const prevData = get().realtime;
-          const prevUpdatedAt = get().realtimeUpdatedAt;
-          const prevOnline = get().onlineIds;
-          let metricsChanged = snap.online.length !== prevOnline.length;
-          if (!metricsChanged) {
-            for (let i = 0; i < prevOnline.length; i++) {
-              if (snap.online[i] !== prevOnline[i]) {
-                metricsChanged = true;
-                break;
-              }
-            }
-          }
-          if (!metricsChanged) {
-            for (const key of Object.keys(snap.data)) {
-              if (snap.data[key] !== prevData[key]) {
-                metricsChanged = true;
-                break;
-              }
-            }
-          }
-          if (!metricsChanged) {
-            for (const key of Object.keys(prevData)) {
-              if (!(key in snap.data)) {
-                metricsChanged = true;
-                break;
-              }
-            }
-          }
-          let timestampChanged = false;
-          if (!timestampChanged) {
-            for (const key of Object.keys(snap.updatedAt)) {
-              if (snap.updatedAt[key] !== prevUpdatedAt[key]) {
-                timestampChanged = true;
-                break;
-              }
-            }
-          }
-          if (metricsChanged || timestampChanged || !get().realtimeReady) {
-            set({
-              ...(metricsChanged
-                ? { onlineIds: snap.online, realtime: snap.data }
-                : {}),
-              ...(metricsChanged || timestampChanged
-                ? { realtimeUpdatedAt: snap.updatedAt }
-                : {}),
-              realtimeReady: true,
-            });
-          }
-        },
-        { intervalMs: pollIntervalMs },
-      );
+       const baseUnsub = dataSource.subscribeRealtime(
+         (snap) => {
+           if (stopped) return;
+           const prevData = get().realtime;
+           const prevUpdatedAt = get().realtimeUpdatedAt;
+           const prevOnline = get().onlineIds;
+           const nextOnline = new Set(snap.online);
+           const onlineChanged =
+             snap.online.length !== prevOnline.length ||
+             prevOnline.some((id) => !nextOnline.has(id));
+           const dataKeys = Object.keys(snap.data);
+           const metricsChanged =
+             dataKeys.length !== Object.keys(prevData).length ||
+             dataKeys.some((key) => snap.data[key] !== prevData[key]);
+           const updatedKeys = Object.keys(snap.updatedAt);
+           const timestampChanged =
+             updatedKeys.length !== Object.keys(prevUpdatedAt).length ||
+             updatedKeys.some((key) => snap.updatedAt[key] !== prevUpdatedAt[key]);
+
+           if (onlineChanged || metricsChanged || timestampChanged || !get().realtimeReady) {
+             set({
+               ...(onlineChanged || !get().realtimeReady
+                 ? { onlineIds: snap.online }
+                 : {}),
+               ...(metricsChanged || !get().realtimeReady
+                 ? { realtime: snap.data }
+                 : {}),
+               ...(metricsChanged || timestampChanged || !get().realtimeReady
+                 ? { realtimeUpdatedAt: snap.updatedAt }
+                 : {}),
+               realtimeReady: true,
+             });
+           }
+         },
+         { intervalMs: pollIntervalMs, initialNodes: nodes, initialSnapshot: snapshot },
+       );
 
       nodeTimer = window.setInterval(() => {
         refreshNodes();

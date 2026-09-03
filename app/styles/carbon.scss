@@ -8,8 +8,6 @@
 @use "@carbon/react/scss/type" as *;
 @use "@carbon/react/scss/motion" as *;
 
-@import "@carbon/charts/styles.css";
-
 @font-face {
   font-family: "IBM Plex Sans";
   font-style: normal;
@@ -127,15 +125,6 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: $background;
-}
-
-.loading-cover {
-  position: fixed;
-  inset: 0;
-  z-index: 9000;
-  display: grid;
-  place-items: center;
   background: $background;
 }
 
@@ -395,6 +384,55 @@ body {
 .node-map-lazy-host > .node-map,
 .node-map-lazy-host > .node-map--placeholder {
   flex: 1 1 auto;
+}
+
+.detail-chart-placeholder-stack {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-06;
+}
+
+.node-grid > .node-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 28rem;
+}
+
+.placeholder-solid {
+  background: $layer-01;
+}
+
+.placeholder-accent {
+  background: $layer-accent-01;
+}
+
+.placeholder-inner {
+  background: color-mix(in srgb, $text-primary 4%, transparent);
+}
+
+.node-card-placeholder {
+  min-height: 17rem;
+}
+
+.node-table-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 64rem;
+  overflow: hidden;
+  background: $border-subtle-01;
+}
+
+.node-table-placeholder-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.node-table-placeholder__header {
+  min-height: 3rem;
+}
+
+.node-table-placeholder__row {
+  min-height: 3.5rem;
 }
 
 .node-map__meta {
@@ -1061,7 +1099,7 @@ body {
 }
 
 .node-card.is-offline {
-  border-inline-start: 2px solid $support-error;
+  border-inline-start: 0;
 }
 
 .node-card.is-offline > .node-card__content {
@@ -1102,8 +1140,8 @@ body {
   gap: $spacing-01;
   max-width: calc(100% - #{$spacing-05} - #{$spacing-05});
   padding: $spacing-02 $spacing-03;
-  background: $layer-01;
-  border-inline-start: 2px solid $support-error;
+  background: transparent;
+  border-inline-start: 0;
   color: $support-error;
   @include type-style("helper-text-01");
   line-height: 1.2;
@@ -1445,14 +1483,21 @@ body {
 }
 
 .card-ping-point__name {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-01;
   @include type-style("helper-text-01");
   flex: 1 1 auto;
+  min-width: 0;
+  color: $text-primary;
+  font-weight: 400;
+}
+
+.card-ping-point__name-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: $text-primary;
-  font-weight: 400;
 }
 
 .card-ping-point__strips,
@@ -1824,6 +1869,14 @@ body {
 }
 
 .table-ping-cell__name {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-01;
+  min-width: 0;
+}
+
+.table-ping-cell__name-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2174,6 +2227,58 @@ body {
   min-width: 0;
 }
 
+.info-tip__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: $icon-secondary;
+  cursor: help;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.info-tip {
+  display: inline-flex;
+  align-items: center;
+  width: 0.75rem;
+  height: 0.75rem;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+.info-tip__content {
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.ping-info-tip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: $spacing-01;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.ping-info-tip__assessment {
+  margin-top: $spacing-01;
+  color: $text-inverse;
+}
+
+.info-tip__trigger:hover {
+  color: $icon-primary;
+}
+
+.info-tip__trigger:focus-visible {
+  outline: 2px solid $focus;
+  outline-offset: 2px;
+}
+
 .detail-info-cell__value {
   @include type-style("body-compact-01");
   word-break: break-word;
@@ -2221,6 +2326,151 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   align-items: stretch;
+}
+
+.detail-info-placeholder {
+  align-items: stretch;
+}
+
+.detail-placeholder-section {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-04;
+  min-width: 0;
+  padding: $spacing-04;
+  background: $layer-01;
+}
+
+.detail-placeholder-heading {
+  width: 6rem;
+  height: 1rem;
+}
+
+.detail-placeholder-cells {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: $spacing-03;
+}
+
+.detail-placeholder-cells--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.detail-placeholder-cells--network {
+  grid-template-columns: 1.4fr 1fr;
+}
+
+.detail-placeholder-cell {
+  min-height: 4.5rem;
+}
+
+.detail-placeholder-cell.is-wide {
+  grid-column: 1 / -1;
+}
+
+.detail-chart-placeholder {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-content: start;
+  gap: $spacing-05;
+}
+
+.detail-chart-placeholder span {
+  display: block;
+  min-height: 8rem;
+}
+
+.detail-load-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-05;
+}
+
+.detail-load-placeholder__toolbar {
+  width: 50%;
+  min-width: 12rem;
+  height: 2.5rem;
+}
+
+.detail-latency-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-04;
+}
+
+.detail-latency-placeholder__toolbar {
+  display: flex;
+  align-items: center;
+  gap: $spacing-03;
+}
+
+.detail-latency-placeholder__toolbar span:first-child {
+  flex: 1 1 auto;
+  height: 2.5rem;
+}
+
+.detail-latency-placeholder__toolbar span:last-child {
+  width: 7rem;
+  height: 2.5rem;
+}
+
+.detail-latency-placeholder__tasks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: $spacing-02;
+}
+
+.detail-latency-placeholder__task {
+  display: flex;
+  min-width: 0;
+  min-height: 4.5rem;
+  background: $layer-01;
+}
+
+.detail-latency-placeholder__task > span {
+  width: 0.25rem;
+  flex: 0 0 0.25rem;
+}
+
+.detail-latency-placeholder__task-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: $spacing-02;
+  min-width: 0;
+  padding: $spacing-03 $spacing-04;
+}
+
+.detail-latency-placeholder__task-body span:first-child {
+  width: 72%;
+  height: 0.9rem;
+}
+
+.detail-latency-placeholder__task-body span:last-child {
+  width: 92%;
+  height: 0.7rem;
+}
+
+.detail-latency-placeholder__main {
+  padding: $spacing-04;
+  background: $layer-01;
+}
+
+.detail-latency-placeholder__chart {
+  min-height: 16rem;
+}
+
+.detail-latency-placeholder__chart.placeholder-accent {
+  display: block;
+}
+
+.detail-latency-placeholder__chart {
+  width: 100%;
+}
+
+.detail-latency-placeholder__chart:only-child {
+  min-height: 28rem;
 }
 
 /* Emerald-style: usage as background fill inside the traffic cell */
@@ -2422,10 +2672,6 @@ body {
     width: 100% !important;
   }
 
-  /* Spinner fills the reserved chart area and stays vertically centered */
-  .page-spinner {
-    min-height: 100%;
-  }
 }
 
 @media (max-width: 66rem) {
@@ -2435,6 +2681,31 @@ body {
 }
 
 @media (max-width: 42rem) {
+  .detail-chart-placeholder,
+  .detail-placeholder-cells,
+  .detail-placeholder-cells--2,
+  .detail-placeholder-cells--network {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-placeholder-cell.is-wide {
+    grid-column: auto;
+  }
+
+  .detail-latency-placeholder__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .detail-latency-placeholder__toolbar span:first-child,
+  .detail-latency-placeholder__toolbar span:last-child {
+    width: 100%;
+  }
+
+  .detail-latency-placeholder__tasks {
+    grid-template-columns: 1fr;
+  }
+
   .load-chart-grid {
     grid-template-columns: 1fr;
   }
@@ -2667,6 +2938,11 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .detail-route-placeholder__metrics,
+  .detail-route-placeholder__finance {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .detail-live-grid.is-gpu {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -2693,17 +2969,6 @@ body {
   }
 }
 
-.page-spinner {
-  min-height: 12rem;
-  display: grid;
-  place-items: center;
-}
-
-.page-spinner .cds--loading,
-.hydrate-fallback .cds--loading {
-  min-height: unset;
-}
-
 .hydrate-fallback {
   min-height: 100vh;
   display: grid;
@@ -2713,15 +2978,43 @@ body {
   background: $background;
 }
 
+.hydrate-fallback__block {
+  width: min(18rem, 60vw);
+  height: 1rem;
+  background: $layer-accent-01;
+}
+
+.detail-route-placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-06;
+}
+
+.detail-route-placeholder__bar {
+  width: 42%;
+  height: 2rem;
+}
+
+.detail-route-placeholder__metrics,
+.detail-route-placeholder__finance {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: $spacing-04;
+}
+
+.detail-placeholder-metric {
+  min-height: 6rem;
+}
+
+.detail-route-placeholder__charts {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-06;
+}
+
 @media (max-width: 42rem) {
   .app-shell,
-  .loading-cover,
   .hydrate-fallback {
-    min-height: 100svh;
-  }
-
-  /* Route-level loading stays centered in the stable mobile viewport. */
-  .app-main > .container > .page-spinner {
     min-height: 100svh;
   }
 

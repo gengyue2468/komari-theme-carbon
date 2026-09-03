@@ -20,7 +20,15 @@ import {
 } from "@carbon/icons-react";
 import type { CarbonIconType } from "@carbon/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigationType } from "react-router";
 import { FinancePopover } from "~/components/FinancePopover";
@@ -31,6 +39,7 @@ import { StatPopover } from "~/components/StatPopover";
 import { dataSource } from "~/api/datasource";
 import { isNodeInGroup, parseNodeGroups } from "~/lib/groups";
 import { computeHomeStats } from "~/lib/home-stats";
+import { buildNodePingHistorySummaries } from "~/lib/ping-display";
 import { queryKeys } from "~/lib/query-client";
 import { useNodesStore } from "~/stores/nodes";
 import type { Route } from "./+types/home";
@@ -84,26 +93,55 @@ function writeJson(key: string, value: unknown) {
   }
 }
 
+function NodeListPlaceholder({ viewMode }: { viewMode: "grid" | "table" }) {
+  if (viewMode === "table") {
+    return (
+      <div className="node-table-placeholder-scroll" aria-hidden="true">
+        <div className="node-table-placeholder">
+          <div className="node-table-placeholder__header placeholder-accent" />
+          {Array.from({ length: 6 }, (_, index) => (
+            <div className="node-table-placeholder__row placeholder-solid" key={index} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="node-grid home-node-placeholder" aria-hidden="true">
+      {Array.from({ length: 6 }, (_, index) => (
+        <div className="node-card-placeholder placeholder-solid" key={index} />
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navType = useNavigationType();
   const nodes = useNodesStore((s) => s.nodes);
   const onlineIds = useNodesStore((s) => s.onlineIds);
   const realtime = useNodesStore((s) => s.realtime);
   const realtimeUpdatedAt = useNodesStore((s) => s.realtimeUpdatedAt);
   const realtimeReady = useNodesStore((s) => s.realtimeReady);
+  const loading = useNodesStore((s) => s.loading);
   const error = useNodesStore((s) => s.error);
   const showUptime = useNodesStore((s) => s.showUptime);
   const viewMode = useNodesStore((s) => s.viewMode);
   const setViewMode = useNodesStore((s) => s.setViewMode);
+  const [recentPingEnabled, setRecentPingEnabled] = useState(false);
   const recentPingQuery = useQuery({
     queryKey: queryKeys.recentPingHistory(1),
     queryFn: ({ signal }) => dataSource.getRecentPingHistory(1, signal),
-    enabled: nodes.length > 0,
+    enabled: recentPingEnabled && nodes.length > 0,
     staleTime: 60_000,
     gcTime: 60_000,
     refetchInterval: 60_000,
   });
+  const pingSummaries = useMemo(
+    () => buildNodePingHistorySummaries(recentPingQuery.data),
+    [recentPingQuery.data, i18n.language],
+  );
 
   // POP = back/forward: restore the UI snapshot. Reload = fresh entry (don't
   // resurrect stale filters/scroll from an earlier visit in this tab).
@@ -124,9 +162,26 @@ export default function Home() {
   const [group, setGroup] = useState(saved?.group ?? "all");
   const [searchOpen, setSearchOpen] = useState(saved?.searchOpen ?? false);
   const [search, setSearch] = useState(saved?.search ?? "");
+  const deferredSearch = useDeferredValue(search);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mapHostRef = useRef<HTMLDivElement>(null);
   const [mapVisible, setMapVisible] = useState(false);
+
+  useEffect(() => {
+    if (nodes.length === 0) return;
+    let idleId: number | null = null;
+    let timeoutId: number | null = null;
+    const enable = () => setRecentPingEnabled(true);
+    if (typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(enable, { timeout: 1_500 });
+    } else {
+      timeoutId = window.setTimeout(enable, 0);
+    }
+    return () => {
+      if (idleId != null) window.cancelIdleCallback(idleId);
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+    };
+  }, [nodes.length]);
 
   useEffect(() => {
     const host = mapHostRef.current;
@@ -135,16 +190,31 @@ export default function Home() {
       setMapVisible(true);
       return;
     }
+    let idleId: number | null = null;
+    let timeoutId: number | null = null;
+    const loadMap = () => {
+      if (typeof window.requestIdleCallback === "function") {
+        idleId = window.requestIdleCallback(() => setMapVisible(true), {
+          timeout: 2_000,
+        });
+      } else {
+        timeoutId = window.setTimeout(() => setMapVisible(true), 0);
+      }
+    };
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (!entry?.isIntersecting) return;
-        setMapVisible(true);
+        loadMap();
         observer.disconnect();
       },
-      { rootMargin: "160px" },
+      { rootMargin: "0px" },
     );
     observer.observe(host);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (idleId != null) window.cancelIdleCallback(idleId);
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+    };
   }, []);
 
   const groupTabs = useMemo(() => {
@@ -168,7 +238,7 @@ export default function Home() {
   );
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     return groupNodes.filter((n) => {
       if (!q) return true;
       return (
@@ -182,7 +252,7 @@ export default function Home() {
         n.remark?.toLowerCase().includes(q)
       );
     });
-  }, [groupNodes, search]);
+  }, [deferredSearch, groupNodes]);
 
   const hasFilters = group !== "all" || search.trim().length > 0;
 
@@ -356,7 +426,9 @@ export default function Home() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading && nodes.length === 0 ? (
+        <NodeListPlaceholder viewMode={viewMode} />
+      ) : filtered.length === 0 ? (
         <div className="empty-state">
           <p className="empty">
             {t(hasFilters ? "app.noMatches" : "app.empty")}
@@ -376,7 +448,7 @@ export default function Home() {
               online={onlineSet.has(node.uuid)}
               realtimeReady={realtimeReady}
               metrics={realtimeReady ? realtime[node.uuid] : undefined}
-              pingHistory={recentPingQuery.data}
+              pingSummary={pingSummaries.get(node.uuid)}
               lastSeenAt={
                 realtimeReady && !onlineSet.has(node.uuid)
                   ? realtimeUpdatedAt[node.uuid] ??
@@ -394,7 +466,7 @@ export default function Home() {
           onlineIds={onlineIds}
           realtimeReady={realtimeReady}
           realtime={realtime}
-          pingHistory={recentPingQuery.data}
+          pingSummaries={pingSummaries}
         />
       )}
     </div>

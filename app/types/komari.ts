@@ -175,7 +175,7 @@ export interface MeInfo {
 export interface KomariDataSource {
   getPublic(signal?: AbortSignal): Promise<PublicSettings>;
   getNodes(signal?: AbortSignal): Promise<NodeInfo[]>;
-  getRealtimeSnapshot(): Promise<RealtimeSnapshot>;
+  getRealtimeSnapshot(signal?: AbortSignal): Promise<RealtimeSnapshot>;
   getRecent(uuid: string): Promise<RealtimeMetrics[]>;
   getRecentLoadRecords(
     uuid: string,
@@ -199,6 +199,10 @@ export interface KomariDataSource {
   getMe(): Promise<MeInfo>;
   subscribeRealtime(
     cb: (snap: RealtimeSnapshot) => void,
-    options?: { intervalMs?: number },
+    options?: {
+      intervalMs?: number;
+      initialNodes?: NodeInfo[];
+      initialSnapshot?: RealtimeSnapshot;
+    },
   ): () => void;
 }

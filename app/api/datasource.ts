@@ -2,6 +2,7 @@ import type {
   KomariDataSource,
   LoadRecordsResponse,
   MeInfo,
+  NodeInfo,
   PingHistoryResponse,
   PublicSettings,
   RealtimeMetrics,
@@ -224,12 +225,15 @@ function metricsToLoadRecord(uuid: string, metrics: RealtimeMetrics): LoadRecord
   };
 }
 
-async function restRealtimeSnapshot(): Promise<RealtimeSnapshot> {
-  const nodes = await restNodes();
+async function restRealtimeSnapshot(
+  signal?: AbortSignal,
+  initialNodes?: NodeInfo[],
+): Promise<RealtimeSnapshot> {
+  const nodes = initialNodes ?? (await restNodes(signal));
   const latestByNode = await Promise.all(
     nodes.map(async (node) => {
       try {
-        const records = await restRecent(node.uuid);
+        const records = await restRecent(node.uuid, signal);
         const latest = records.reduce<Partial<RealtimeMetrics> | undefined>(
           (current, candidate) => {
             if (!current) return candidate;
@@ -378,15 +382,15 @@ function createRpcDataSource(): KomariDataSource {
       }
     },
 
-    async getRealtimeSnapshot() {
+    async getRealtimeSnapshot(signal) {
       try {
-        return mapStatusesToSnapshot(await rpcGetNodesLatestStatus());
+        return mapStatusesToSnapshot(await rpcGetNodesLatestStatus(signal));
       } catch (e) {
         if (e instanceof RpcError && e.code === 401) {
           window.location.href = "/admin";
           throw e;
         }
-        return restRealtimeSnapshot();
+        return restRealtimeSnapshot(signal);
       }
     },
 
@@ -493,17 +497,21 @@ function createRpcDataSource(): KomariDataSource {
       if (envWs === "true") rpc.setTransport(true);
       else if (envWs === "false") rpc.setTransport(false);
 
-      let inFlight = false;
-      const tick = async () => {
-        if (stopped || inFlight || document.visibilityState === "hidden") return;
-        inFlight = true;
-        try {
-          const statuses = await rpcGetNodesLatestStatus();
-          if (stopped) return;
-          cb(mapStatusesToSnapshot(statuses));
+       let inFlight = false;
+       let requestController: AbortController | null = null;
+       const tick = async () => {
+         if (stopped || inFlight || document.visibilityState === "hidden") return;
+         inFlight = true;
+         const controller = new AbortController();
+         requestController = controller;
+         try {
+           const statuses = await rpcGetNodesLatestStatus(controller.signal);
+           if (stopped) return;
+           cb(mapStatusesToSnapshot(statuses));
           failCount = 0;
-        } catch (e) {
-          failCount += 1;
+         } catch (e) {
+           if (stopped || controller.signal.aborted) return;
+           failCount += 1;
           if (e instanceof RpcError && e.code === 401) {
             window.location.href = "/admin";
             return;
@@ -515,24 +523,28 @@ function createRpcDataSource(): KomariDataSource {
             rpc.setTransport(false);
           }
           try {
-            const statuses = await rpcGetNodesLatestStatus();
-            if (stopped) return;
+             const statuses = await rpcGetNodesLatestStatus(controller.signal);
+             if (stopped) return;
             cb(mapStatusesToSnapshot(statuses));
             failCount = 0;
             return;
           } catch {
             try {
-              const fallback = await restRealtimeSnapshot();
-              if (stopped) return;
-              cb(fallback);
+               const fallback = await restRealtimeSnapshot(
+                 controller.signal,
+                 options?.initialNodes,
+               );
+               if (stopped) return;
+               cb(fallback);
               failCount = 0;
             } catch {
               // Preserve the last good snapshot instead of publishing false offline states.
             }
           }
-        } finally {
-          inFlight = false;
-        }
+         } finally {
+           if (requestController === controller) requestController = null;
+           inFlight = false;
+         }
       };
 
       const schedule = () => {
@@ -556,17 +568,19 @@ function createRpcDataSource(): KomariDataSource {
       };
       document.addEventListener("visibilitychange", onVisibilityChange);
 
-      void (async () => {
-        // Skip extra rpc.ping RTT — first status call is enough health check
-        await tick();
-        if (stopped) return;
-        schedule();
-      })();
+       if (options?.initialSnapshot) {
+         // Bootstrap already fetched the first snapshot. Wait for the normal
+         // interval instead of issuing the same request a second time.
+         schedule();
+       } else {
+         void tick().finally(schedule);
+       }
 
       return () => {
-        stopped = true;
-        clearTimer();
-        document.removeEventListener("visibilitychange", onVisibilityChange);
+           stopped = true;
+           clearTimer();
+           requestController?.abort();
+           document.removeEventListener("visibilitychange", onVisibilityChange);
         rpc.closeWs();
       };
     },

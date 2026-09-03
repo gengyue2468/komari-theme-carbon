@@ -1,4 +1,4 @@
-import { ActionableNotification, Loading } from "@carbon/react";
+import { ActionableNotification } from "@carbon/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import {
   isRouteErrorResponse,
@@ -51,12 +51,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export function HydrateFallback() {
-  const { t } = useTranslation();
-  return (
-    <div className="hydrate-fallback" role="status" aria-label={t("app.loading")}>
-      <Loading small withOverlay={false} />
-    </div>
-  );
+  return null;
 }
 
 export default function App() {

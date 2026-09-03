@@ -2,7 +2,6 @@ import {
   Header,
   HeaderGlobalAction,
   HeaderGlobalBar,
-  Loading,
   SkipToContent,
 } from "@carbon/react";
 import {
@@ -33,7 +32,6 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
   const carbonTheme = useAppearanceStore((s) => s.carbonTheme);
   const setAppearance = useAppearanceStore((s) => s.setAppearance);
   const publicSettings = useNodesStore((s) => s.publicSettings);
-  const loading = useNodesStore((s) => s.loading);
   const bootstrap = useNodesStore((s) => s.bootstrap);
   const teardown = useNodesStore((s) => s.teardown);
   const [faviconOk, setFaviconOk] = useState(true);
@@ -89,12 +87,6 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
 
   return (
     <div className="app-shell">
-      {loading && (
-        <div className="loading-cover" role="status">
-          <Loading withOverlay={false} small description={t("app.loading")} />
-        </div>
-      )}
-
       <Header aria-label="Komari" className="app-header">
         <div className="container app-header__inner">
           <SkipToContent />
@@ -141,16 +133,12 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
         </div>
       </Header>
 
-      {!loading && (
-        <>
-          <main id="main-content" className="app-main">
-            <div className="container">
-              {children ?? <Outlet />}
-            </div>
-          </main>
-          <footer className="app-footer">
-            <div className="container app-footer__row row-between">
-              <span>
+      <main id="main-content" className="app-main">
+        <div className="container">{children ?? <Outlet />}</div>
+      </main>
+      <footer className="app-footer">
+        <div className="container app-footer__row row-between">
+          <span>
                 {t("app.poweredByPrefix")}{" "}
                 <a
                   href="https://github.com/komari-monitor/komari"
@@ -160,8 +148,8 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
                   <strong>Komari Monitor</strong>
                 </a>
                 .
-              </span>
-              <span>
+          </span>
+          <span>
                 {t("app.themeBy")}{" "}
                 <a
                   href="https://github.com/gengyue2468/komari-theme-carbon"
@@ -170,11 +158,9 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
                 >
                   <strong>Carbon</strong>
                 </a>
-              </span>
-            </div>
-          </footer>
-        </>
-      )}
+          </span>
+        </div>
+      </footer>
     </div>
   );
 }

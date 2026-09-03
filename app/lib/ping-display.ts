@@ -1,5 +1,5 @@
 import type { NodePingLive, RealtimeMetrics } from "~/types/komari";
-import type { PingHistoryResponse } from "~/types/komari";
+import type { PingHistoryRecord, PingHistoryResponse } from "~/types/komari";
 import i18n from "~/i18n";
 import { ISP_COLORS, PING_TASK_COLORS } from "~/lib/ping-tone";
 
@@ -88,6 +88,8 @@ export interface NodePingHistorySummary {
 
 const NODE_PING_BAR_COUNT = 10;
 
+type TimedPingRecord = PingHistoryRecord & { timestamp: number };
+
 function mean(values: number[]): number | null {
   return values.length
     ? values.reduce((sum, value) => sum + value, 0) / values.length
@@ -104,20 +106,10 @@ export function formatLatencyMs(value: number | null): string {
   return `${value.toFixed(1)}ms`;
 }
 
-/** Reduce the shared one-hour Ping history into the compact node summary. */
-export function buildNodePingHistorySummary(
-  hist: PingHistoryResponse | undefined,
-  uuid: string,
-): NodePingHistorySummary | null {
-  if (!hist) return null;
-  const records = hist.records
-    .filter((record) => record.client === uuid)
-    .map((record) => ({
-      ...record,
-      timestamp: new Date(record.time).getTime(),
-    }))
-    .filter((record) => Number.isFinite(record.timestamp))
-    .sort((a, b) => a.timestamp - b.timestamp);
+function buildSummaryFromRecords(
+  records: TimedPingRecord[],
+  tasks: PingHistoryResponse["tasks"],
+): NodePingHistorySummary {
   if (!records.length) {
     return { networks: [], bars: [], avgLatencyMs: null, avgLossPct: null };
   }
@@ -133,11 +125,11 @@ export function buildNodePingHistorySummary(
   }
 
   const taskName = new Map(
-    hist.tasks.map((task) => [task.id, task.name || i18n.t("detail.task", { id: task.id })]),
+    tasks.map((task) => [task.id, task.name || i18n.t("detail.task", { id: task.id })]),
   );
   const networkAverages: number[] = [];
   const orderedTaskIds = [
-    ...hist.tasks.map((task) => task.id),
+    ...tasks.map((task) => task.id),
     ...taskStats.keys(),
   ].filter((id, index, all) => taskIds.has(id) && all.indexOf(id) === index);
   const networks = orderedTaskIds.map((id) => {
@@ -185,6 +177,43 @@ export function buildNodePingHistorySummary(
     avgLatencyMs: averageLatency == null ? null : roundLatency(averageLatency),
     avgLossPct: mean(networks.map((network) => network.lossPct ?? 0)),
   };
+}
+
+/** Reduce the shared one-hour Ping history into the compact node summary. */
+export function buildNodePingHistorySummary(
+  hist: PingHistoryResponse | undefined,
+  uuid: string,
+): NodePingHistorySummary | null {
+  if (!hist) return null;
+  const records = hist.records
+    .filter((record) => record.client === uuid)
+    .map((record) => ({ ...record, timestamp: new Date(record.time).getTime() }))
+    .filter((record) => Number.isFinite(record.timestamp))
+    .sort((a, b) => a.timestamp - b.timestamp);
+  return buildSummaryFromRecords(records, hist.tasks);
+}
+
+/** Build all node summaries in one pass over the shared history response. */
+export function buildNodePingHistorySummaries(
+  hist: PingHistoryResponse | undefined,
+): ReadonlyMap<string, NodePingHistorySummary> {
+  if (!hist) return new Map();
+  const byNode = new Map<string, TimedPingRecord[]>();
+  for (const record of hist.records) {
+    if (!record.client) continue;
+    const timestamp = new Date(record.time).getTime();
+    if (!Number.isFinite(timestamp)) continue;
+    const records = byNode.get(record.client) ?? [];
+    records.push({ ...record, timestamp });
+    byNode.set(record.client, records);
+  }
+
+  const summaries = new Map<string, NodePingHistorySummary>();
+  for (const [uuid, records] of byNode) {
+    records.sort((a, b) => a.timestamp - b.timestamp);
+    summaries.set(uuid, buildSummaryFromRecords(records, hist.tasks));
+  }
+  return summaries;
 }
 
 export function sparkFromLivePing(

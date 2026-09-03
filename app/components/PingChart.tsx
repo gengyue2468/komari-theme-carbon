@@ -1,5 +1,6 @@
 import { Button, Modal, Tab, TabList, Tabs, Tile } from "@carbon/react";
 import { LineChart } from "@carbon/charts-react";
+import "@carbon/charts/styles.css";
 import {
   Alignments,
   ScaleTypes,
@@ -10,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dataSource } from "~/api/datasource";
 import { buildPingChartModel, formatLatencyMs } from "~/lib/ping-display";
-import { PageSpinner } from "~/components/PageSpinner";
+import { LatencyPlaceholder } from "~/components/ChartPlaceholder";
 import {
   buildChartLocale,
   formatChartTime,
@@ -166,6 +167,18 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectionReady, setSelectionReady] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const dialogLauncherRef = useRef<HTMLElement | null>(null);
+  const dialogWasOpenRef = useRef(false);
+
+  useEffect(() => {
+    const wasOpen = dialogWasOpenRef.current;
+    dialogWasOpenRef.current = dialogOpen;
+    if (!wasOpen || dialogOpen) return;
+    const frame = window.requestAnimationFrame(() => {
+      dialogLauncherRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [dialogOpen]);
 
   const hours =
     availableRanges.find((r) => r.key === range)?.hours ??
@@ -462,7 +475,7 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
       {renderToolbar()}
 
       {loading ? (
-        <PageSpinner />
+          <LatencyPlaceholder variant="body" />
       ) : pingQuery.isError && !pingQuery.data ? (
         <p className="empty" role="alert">{t("detail.pingDataError")}</p>
       ) : tasks.length === 0 ? (
@@ -478,13 +491,17 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
             aria-label={
               hasChartVisual ? t("detail.openPingChart") : undefined
             }
-            onClick={() => {
-              if (hasChartVisual) setDialogOpen(true);
+            onClick={(event) => {
+              if (hasChartVisual) {
+                dialogLauncherRef.current = event.currentTarget;
+                setDialogOpen(true);
+              }
             }}
             onKeyDown={(event) => {
               if (!hasChartVisual) return;
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
+                dialogLauncherRef.current = event.currentTarget;
                 setDialogOpen(true);
               }
             }}
@@ -519,7 +536,7 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
           <div className="ping-chart-dialog__tasks">{renderTaskGrid()}</div>
           <div className="ping-chart-dialog__chart">
             {loading ? (
-              <PageSpinner />
+              <LatencyPlaceholder variant="chart" />
             ) : !hasChartVisual ? (
               <div className="ping-chart-main__empty">{t("detail.noPingData")}</div>
             ) : (

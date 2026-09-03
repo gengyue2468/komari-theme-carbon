@@ -1,4 +1,4 @@
-import { Button, Tag, Tile } from "@carbon/react";
+import { Button, Tag, Tile, Tooltip } from "@carbon/react";
 import {
   Application,
   ArrowLeft,
@@ -29,7 +29,11 @@ import {
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router";
 import { QuickIcon } from "~/components/BrandIcon";
-import { PageSpinner } from "~/components/PageSpinner";
+import {
+  ChartPlaceholder,
+  LatencyPlaceholder,
+  LoadPlaceholder,
+} from "~/components/ChartPlaceholder";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
   calcMonthlyValueCny,
@@ -118,6 +122,77 @@ function ScrollingName({ name }: { name: string }) {
   );
 }
 
+function DetailPlaceholderSection({
+  columns,
+  count,
+  wideFirst = false,
+  network = false,
+}: {
+  columns: 2 | 3;
+  count: number;
+  wideFirst?: boolean;
+  network?: boolean;
+}) {
+  return (
+    <div
+      className={`detail-placeholder-section${network ? " detail-placeholder-section--network" : ""}`}
+      aria-hidden="true"
+    >
+      <div className="detail-placeholder-heading placeholder-accent" />
+      <div
+        className={`detail-placeholder-cells detail-placeholder-cells--${columns}${network ? " detail-placeholder-cells--network" : ""}`}
+      >
+        {Array.from({ length: count }, (_, index) => (
+          <div
+            className={`detail-placeholder-cell placeholder-inner${wideFirst && index === 0 ? " is-wide" : ""}`}
+            key={index}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DetailInfoPlaceholder() {
+  return (
+    <div
+      className="detail-info-grid detail-info-placeholder"
+      aria-hidden="true"
+    >
+      <DetailPlaceholderSection columns={3} count={4} wideFirst />
+      <DetailPlaceholderSection columns={2} count={4} />
+      <DetailPlaceholderSection columns={3} count={3} />
+      <DetailPlaceholderSection columns={2} count={2} network />
+    </div>
+  );
+}
+
+function DetailRoutePlaceholder({ label }: { label: string }) {
+  return (
+    <div className="detail-route-placeholder" role="status" aria-label={label}>
+      <div
+        className="detail-route-placeholder__bar placeholder-accent"
+        aria-hidden="true"
+      />
+      <div className="detail-route-placeholder__metrics">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div className="detail-placeholder-metric placeholder-solid" key={index} />
+        ))}
+      </div>
+      <div className="detail-route-placeholder__finance">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div className="detail-placeholder-metric placeholder-solid" key={index} />
+        ))}
+      </div>
+      <DetailInfoPlaceholder />
+      <div className="detail-route-placeholder__charts">
+        <LoadPlaceholder />
+        <LatencyPlaceholder />
+      </div>
+    </div>
+  );
+}
+
 export default function NodeDetail() {
   const { uuid = "" } = useParams();
   const { t, i18n } = useTranslation();
@@ -136,23 +211,55 @@ export default function NodeDetail() {
   const [financeRates, setFinanceRates] = useState<ExchangeRates>(
     DEFAULT_EXCHANGE_RATES,
   );
+  const chartsHostRef = useRef<HTMLDivElement>(null);
+  const [chartsVisible, setChartsVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    void getDailyExchangeRates().then((rates) => {
-      if (!cancelled) setFinanceRates(rates);
-    });
+    const load = () => {
+      void getDailyExchangeRates().then((rates) => {
+        if (!cancelled) setFinanceRates(rates);
+      });
+    };
+    let idleId: number | null = null;
+    let timeoutId: number | null = null;
+    if (typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(load, { timeout: 1_500 });
+    } else {
+      timeoutId = window.setTimeout(load, 0);
+    }
     return () => {
       cancelled = true;
+      if (idleId != null) window.cancelIdleCallback(idleId);
+      if (timeoutId != null) window.clearTimeout(timeoutId);
     };
   }, []);
+
+  useEffect(() => {
+    const host = chartsHostRef.current;
+    if (!host) return;
+    if (!("IntersectionObserver" in window)) {
+      setChartsVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setChartsVisible(true);
+        observer.disconnect();
+      },
+      { rootMargin: "240px" },
+    );
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [nodes.length, uuid]);
 
   const node = useMemo(() => nodes.find((n) => n.uuid === uuid), [nodes, uuid]);
   const online = realtimeReady && onlineIds.includes(uuid);
   const metrics = realtimeReady ? realtime[uuid] : undefined;
 
   if (!node) {
-    if (loading) return <PageSpinner />;
+    if (loading) return <DetailRoutePlaceholder label={t("app.loading")} />;
     // Unified error handling: root ErrorBoundary renders the banner.
     throw new Error(t("detail.notFound"));
   }
@@ -430,24 +537,29 @@ export default function NodeDetail() {
               {t("detail.autoRenewal")}
             </Tag>
           ) : null}
-          <span
-            className={`detail-status-dot${!realtimeReady ? " is-loading" : online ? "" : " is-offline"}`}
-            role="status"
-            aria-label={
+          <Tooltip
+            as="span"
+            label={
               !realtimeReady
                 ? t("app.statusLoading")
                 : online
                   ? t("app.online")
                   : t("app.offline")
             }
-            title={
-              !realtimeReady
-                ? t("app.statusLoading")
-                : online
-                  ? t("app.online")
-                  : t("app.offline")
-            }
-          />
+            align="top"
+          >
+            <span
+              className={`detail-status-dot${!realtimeReady ? " is-loading" : online ? "" : " is-offline"}`}
+              role="status"
+              aria-label={
+                !realtimeReady
+                  ? t("app.statusLoading")
+                  : online
+                    ? t("app.online")
+                    : t("app.offline")
+              }
+            />
+          </Tooltip>
         </div>
       </div>
 
@@ -509,6 +621,9 @@ export default function NodeDetail() {
         ))}
       </div>
 
+      {!realtimeReady ? (
+        <DetailInfoPlaceholder />
+      ) : (
       <div className="detail-info-grid">
         <Tile className="detail-section">
           <h3 className="detail-section__title">{t("detail.hardware")}</h3>
@@ -651,6 +766,7 @@ export default function NodeDetail() {
           </div>
         </Tile>
       </div>
+      )}
 
       {gpuDetails.length > 0 ? (
         <div className="detail-gpu-grid">
@@ -697,19 +813,31 @@ export default function NodeDetail() {
       ) : null}
 
       {recordEnabled ? (
-        <>
-          <Suspense fallback={<PageSpinner />}>
+        chartsVisible ? (
+          <Suspense
+            fallback={
+              <>
+                <ChartPlaceholder />
+                <LatencyPlaceholder />
+              </>
+            }
+          >
             <LoadChart uuid={node.uuid} />
-          </Suspense>
-
-          <Suspense fallback={<PageSpinner />}>
             <PingChart
               uuid={node.uuid}
               online={online}
               realtimeReady={realtimeReady}
             />
           </Suspense>
-        </>
+        ) : (
+          <div
+            ref={chartsHostRef}
+            className="detail-chart-placeholder-stack"
+          >
+            <LoadPlaceholder />
+            <LatencyPlaceholder />
+          </div>
+        )
       ) : (
         <p className="empty">{t("detail.recordsDisabled")}</p>
       )}

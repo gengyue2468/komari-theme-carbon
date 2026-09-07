@@ -15,6 +15,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useLocation } from "react-router";
 import { setLanguage, syncHtmlLang } from "~/i18n";
+import { VisitorInfoCard } from "~/components/VisitorInfoCard";
 import type { Appearance } from "~/types/komari";
 import {
   applyThemeToDocument,
@@ -32,11 +33,17 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
   const carbonTheme = useAppearanceStore((s) => s.carbonTheme);
   const setAppearance = useAppearanceStore((s) => s.setAppearance);
   const publicSettings = useNodesStore((s) => s.publicSettings);
+  const configuredVisitorInfoCardEnabled = useNodesStore(
+    (s) => s.visitorInfoCardEnabled,
+  );
   const bootstrap = useNodesStore((s) => s.bootstrap);
   const teardown = useNodesStore((s) => s.teardown);
   const [faviconOk, setFaviconOk] = useState(true);
 
   const density = useNodesStore((s) => s.density);
+  const visitorInfoCardEnabled =
+    import.meta.env.DEV ||
+    (publicSettings !== null && configuredVisitorInfoCardEnabled);
 
   const { pathname } = useLocation();
   useLayoutEffect(() => {
@@ -136,6 +143,7 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
       <main id="main-content" className="app-main">
         <div className="container">{children ?? <Outlet />}</div>
       </main>
+      {visitorInfoCardEnabled ? <VisitorInfoCard /> : null}
       <footer className="app-footer">
         <div className="container app-footer__row row-between">
           <span>

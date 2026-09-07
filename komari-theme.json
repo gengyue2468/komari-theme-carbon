@@ -2,7 +2,7 @@
   "name": "Komari Carbon",
   "short": "komari-theme-carbon",
   "description": "IBM Carbon + IBM Plex style Komari monitoring theme",
-  "version": "0.1.9",
+  "version": "0.1.9-enhance1",
   "author": "gengyue2468",
   "url": "https://github.com/gengyue2468/komari-theme-carbon",
   "preview": "preview.png",
@@ -45,6 +45,19 @@
         "help": {
           "zh-CN": "在节点卡片上显示 uptime",
           "en": "Show uptime on node cards"
+        }
+      },
+      {
+        "key": "visitorInfoCardEnabled",
+        "name": {
+          "zh-CN": "显示访客信息卡片",
+          "en": "Show visitor information card"
+        },
+        "type": "switch",
+        "default": true,
+        "help": {
+          "zh-CN": "在首页底部显示当前访客的设备、地区和网络信息；需要访问第三方 IP 地理位置服务",
+          "en": "Show the current visitor's device, location, and network details; uses a third-party IP geolocation service"
         }
       },
       {

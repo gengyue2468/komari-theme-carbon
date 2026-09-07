@@ -60,6 +60,7 @@ interface NodesState {
   group: string;
   viewMode: ViewMode;
   showUptime: boolean;
+  visitorInfoCardEnabled: boolean;
   chartHours: number;
   density: DensityMode;
   pollIntervalMs: number;
@@ -85,6 +86,7 @@ export const useNodesStore = create<NodesState>((set, get) => ({
   group: "all",
   viewMode: readViewMode("grid"),
   showUptime: true,
+  visitorInfoCardEnabled: true,
   chartHours: 4,
   density: "comfortable",
   pollIntervalMs: 3000,
@@ -144,9 +146,12 @@ export const useNodesStore = create<NodesState>((set, get) => ({
 
       const defaultView = resolveDefaultView(settings);
       const viewMode = readViewMode(defaultView);
-      const showUptime =
-        settings.showUptime !== false && settings.showUptime !== "false";
-      const chartHours = asNumber(settings.defaultChartHours, 4, 1, 168);
+       const showUptime =
+         settings.showUptime !== false && settings.showUptime !== "false";
+       const visitorInfoCardEnabled =
+         settings.visitorInfoCardEnabled !== false &&
+         settings.visitorInfoCardEnabled !== "false";
+       const chartHours = asNumber(settings.defaultChartHours, 4, 1, 168);
       const density = resolveDensity(settings);
 
        const [nodes, snapshot] = await Promise.all([
@@ -173,9 +178,10 @@ export const useNodesStore = create<NodesState>((set, get) => ({
         realtime: snapshot.data,
         realtimeUpdatedAt: snapshot.updatedAt,
         realtimeReady: true,
-        viewMode,
-        showUptime,
-        chartHours,
+         viewMode,
+         showUptime,
+         visitorInfoCardEnabled,
+         chartHours,
         density,
         pollIntervalMs,
         loading: false,

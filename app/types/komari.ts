@@ -16,6 +16,7 @@ export interface ThemeSettings {
   defaultView?: ViewMode;
   defaultViewMode?: string;
   showUptime?: boolean;
+  visitorInfoCardEnabled?: boolean;
   defaultChartHours?: number;
   density?: "comfortable" | "compact";
   dataUpdateInterval?: number;

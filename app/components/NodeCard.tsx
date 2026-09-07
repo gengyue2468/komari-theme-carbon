@@ -208,11 +208,13 @@ function StatGroup({ node, metrics, showUptime }: Pick<NodeCardProps, "node" | "
             unit={trafficPct != null ? "%" : undefined}
             pct={trafficPct}
             hint={
-              metrics && node.traffic_limit > 0
-                ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)} / ${trafficLimitTypeLabel(node.traffic_limit_type)}`
-                : node.traffic_limit > 0
-                  ? "—"
-                  : "∞"
+              node.traffic_limit > 0
+                ? metrics
+                  ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)} / ${trafficLimitTypeLabel(node.traffic_limit_type)}`
+                  : "—"
+                : metrics
+                  ? `${formatBytes(trafficUsed)} / ∞`
+                  : "— / ∞"
             }
           />
         </div>

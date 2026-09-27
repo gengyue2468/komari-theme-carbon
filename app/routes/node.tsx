@@ -52,12 +52,12 @@ import {
   formatBytes,
   formatDateTimeWithoutSeconds,
   formatRate,
+  formatTrafficUsage,
   formatRemainTime,
   formatUptimeWithFormat,
   isNeverExpire,
   parseTags,
   percentOf,
-  trafficLimitTypeLabel,
   trafficUsedBytes,
 } from "~/lib/format";
 import { getArchIcon, getOsIcon, getVirtIcon } from "~/lib/os-arch";
@@ -397,7 +397,9 @@ export default function NodeDetail() {
           ? `${monthlyMetric.symbol}${monthlyMetric.value}`
           : t("detail.notApplicable"),
       unit:
-        node.billing_cycle > 0 ? `${monthlyMetric.currency} / mo` : undefined,
+        node.billing_cycle > 0
+          ? `${monthlyMetric.currency} / ${t("time.monthShort")}`
+          : undefined,
       Icon: Currency,
     },
     {
@@ -727,21 +729,19 @@ export default function NodeDetail() {
                   <Download size={16} />
                 </div>
                 <div className="detail-info-cell__value numeric">
-                  {hasLimit && metrics
-                    ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)}`
+                  {metrics
+                    ? formatTrafficUsage(
+                        trafficUsed,
+                        node.traffic_limit,
+                        node.traffic_limit_type,
+                      )
                     : hasLimit
                       ? "—"
-                      : t("detail.unlimited")}
+                      : "— / ∞"}
                   {hasLimit && trafficPct != null ? (
                     <span className="detail-traffic-pct">
                       {" "}
                        / {trafficPct.toFixed(1)}%
-                    </span>
-                  ) : null}
-                  {hasLimit ? (
-                    <span className="detail-traffic-pct">
-                      {" "}
-                       / {trafficLimitTypeLabel(node.traffic_limit_type)}
                     </span>
                   ) : null}
                 </div>
@@ -825,7 +825,6 @@ export default function NodeDetail() {
             <LoadChart uuid={node.uuid} />
             <PingChart
               uuid={node.uuid}
-              online={online}
               realtimeReady={realtimeReady}
             />
           </Suspense>

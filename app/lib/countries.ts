@@ -26,10 +26,6 @@ for (const c of countries) {
   });
 }
 
-export function getCountry(code: string): CountryInfo | undefined {
-  return BY_CODE.get(code.trim().toUpperCase());
-}
-
 export function getCountryCoords(code: string): [number, number] | undefined {
   return BY_CODE.get(code.trim().toUpperCase())?.latlng;
 }

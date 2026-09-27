@@ -183,9 +183,11 @@ export function calcRemainingValueCny(
   rates: ExchangeRates,
   now = new Date(),
 ): number {
-  if (!node.expired_at) return 0;
   const price = priceToCny(node, rates);
   if (price <= 0) return 0;
+  // A missing expiry is how Komari represents a node that never expires.
+  // Its full purchase value is therefore still remaining.
+  if (!node.expired_at) return price;
   const exp = new Date(node.expired_at).getTime();
   if (!Number.isFinite(exp)) return 0;
   const diff = exp - now.getTime();

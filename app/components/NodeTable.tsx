@@ -13,15 +13,14 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 import { QuickIcon } from "~/components/BrandIcon";
-import { InfoTip, PingPointInfo } from "~/components/InfoTip";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
   formatBytes,
+  formatTrafficUsage,
   formatUptimeWithFormat,
   formatRate,
   parseTags,
   percentOf,
-  trafficLimitTypeLabel,
   trafficUsedBytes,
 } from "~/lib/format";
 import { getArchIcon, getOsIcon } from "~/lib/os-arch";
@@ -211,6 +210,8 @@ export function NodeTable({
                     <TableRow
                       key={key}
                       {...rowRest}
+                      tabIndex={0}
+                      aria-label={t("table.openNode", { name: d.name })}
                       className={
                         !realtimeReady
                           ? "table-row-clickable is-loading"
@@ -218,7 +219,23 @@ export function NodeTable({
                             ? "table-row-clickable"
                             : "table-row-clickable is-offline"
                       }
-                      onClick={() => navigate(`/node/${row.id}`)}
+                      onClick={(event) => {
+                        const target = event.target;
+                        if (
+                          target instanceof HTMLElement &&
+                          target.closest("a,button,[role='button']")
+                        ) {
+                          return;
+                        }
+                        navigate(`/node/${row.id}`);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return;
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(`/node/${row.id}`);
+                        }
+                      }}
                     >
                       <TableCell>
                         <span
@@ -334,9 +351,11 @@ export function NodeTable({
                           sub={
                             !d._m
                               ? "—"
-                              : d._tLimit > 0
-                                ? `${formatBytes(d._tUsed)} / ${formatBytes(d._tLimit)} / ${trafficLimitTypeLabel(d._n.traffic_limit_type)}`
-                                : "∞"
+                              : formatTrafficUsage(
+                                  d._tUsed,
+                                  d._tLimit,
+                                  d._n.traffic_limit_type,
+                                )
                           }
                         />
                       </TableCell>
@@ -373,26 +392,13 @@ export function NodeTable({
                                 key={point.id}
                                 className="table-ping-cell__line"
                               >
-                                <span className="table-ping-cell__name">
-                                  <span className="table-ping-cell__name-text">
-                                    {point.name || point.id}
-                                  </span>
-                                  <InfoTip
-                                    label={t("detail.pingPointInfo", {
-                                      name: point.name || point.id,
-                                    })}
-                                    description={
-                                      <PingPointInfo
-                                        point={point}
-                                         hasHistory={pingSummaries.has(d.id)}
-                                      />
-                                    }
-                                  />
+                                <span className="table-ping-cell__name-text">
+                                  {point.name || point.id}
                                 </span>
-                                 <span className="table-ping-cell__metric numeric">
-                                   {formatLatencyMs(point.latencyMs)}
+                                <span className="table-ping-cell__metric numeric">
+                                  {formatLatencyMs(point.latencyMs)}
                                 </span>
-                                 <span className="table-ping-cell__metric numeric">
+                                <span className="table-ping-cell__metric numeric">
                                   {point.lossPct != null
                                     ? `${point.lossPct.toFixed(1)}%`
                                     : "—"}

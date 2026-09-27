@@ -25,14 +25,13 @@ type RangeKey = "1h" | "6h" | "12h" | "1d";
 
 interface PingChartProps {
   uuid: string;
-  online: boolean;
   realtimeReady: boolean;
 }
 
 interface ChartPoint {
   group: string;
   date: Date;
-  value: number;
+  value: number | null;
 }
 
 interface LossMarker {
@@ -44,6 +43,73 @@ interface PingLineChartProps {
   data: ChartPoint[];
   options: LineChartOptions;
   lossMarkers: LossMarker[];
+}
+
+interface TaskChartSourcePoint {
+  time: string;
+  values: Record<string, number | null>;
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? null;
+}
+
+/**
+ * Build one series without manufacturing nulls for other tasks' timestamps.
+ * Long-range responses are downsampled independently per task, so a global
+ * time matrix would turn every task's valid sample into another task's gap.
+ */
+function buildTaskChartPoints(
+  task: { id: string; name: string; interval?: number },
+  points: TaskChartSourcePoint[],
+): ChartPoint[] {
+  const source = points
+    .filter((point) =>
+      Object.prototype.hasOwnProperty.call(point.values, task.id),
+    )
+    .map((point) => ({
+      date: new Date(point.time),
+      timestamp: Date.parse(point.time),
+      value: point.values[task.id] ?? null,
+    }))
+    .filter((point) => Number.isFinite(point.timestamp));
+
+  if (source.length === 0) return [];
+
+  const gaps = source
+    .slice(1)
+    .map((point, index) => point.timestamp - source[index].timestamp)
+    .filter((gap) => gap > 0);
+  const expectedInterval = (task.interval ?? 60) * 1000;
+  const typicalInterval = median(gaps) ?? expectedInterval;
+  const gapThreshold = Math.max(
+    expectedInterval * 1.75,
+    typicalInterval * 1.75,
+  );
+
+  const result: ChartPoint[] = [];
+  for (let index = 0; index < source.length; index += 1) {
+    const current = source[index];
+    if (!current) continue;
+    const previous = source[index - 1];
+    if (previous && current.timestamp - previous.timestamp > gapThreshold) {
+      result.push({
+        group: task.name,
+        date: new Date(
+          previous.timestamp + (current.timestamp - previous.timestamp) / 2,
+        ),
+        value: null,
+      });
+    }
+    result.push({
+      group: task.name,
+      date: current.date,
+      value: current.value,
+    });
+  }
+  return result;
 }
 
 function PingLineChart({ data, options, lossMarkers }: PingLineChartProps) {
@@ -131,7 +197,7 @@ const RANGES: Array<{ key: RangeKey; hours: number }> = [
   { key: "1d", hours: 24 },
 ];
 
-export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
+export function PingChart({ uuid, realtimeReady }: PingChartProps) {
   const { t, i18n } = useTranslation();
   const carbonTheme = useAppearanceStore((s) => s.carbonTheme);
   const theme = carbonTheme === "g100" ? "g100" : "g10";
@@ -244,17 +310,9 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
   const chartData = useMemo<ChartPoint[]>(() => {
     const out: ChartPoint[] = [];
     const active = new Set(selectedIds);
-    const nameById = new Map(tasks.map((t) => [t.id, t.name]));
-    for (const p of points) {
-      const date = new Date(p.time);
-      for (const [id, v] of Object.entries(p.values)) {
-        if (!active.has(id) || v == null) continue;
-        out.push({
-          group: nameById.get(id) ?? id,
-          date,
-          value: v,
-        });
-      }
+    for (const task of tasks) {
+      if (!active.has(task.id)) continue;
+      out.push(...buildTaskChartPoints(task, points));
     }
     return out;
   }, [points, selectedIds, tasks]);
@@ -379,7 +437,9 @@ export function PingChart({ uuid, online, realtimeReady }: PingChartProps) {
     );
   };
 
-  const hasChartVisual = chartData.length > 0;
+  const hasChartVisual = chartData.some(
+    (point) => typeof point.value === "number" && Number.isFinite(point.value),
+  );
 
   const renderToolbar = () => (
     <div className="ping-chart-panel__toolbar">

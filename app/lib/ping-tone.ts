@@ -23,14 +23,6 @@ export const COLOR_UP = "var(--cds-interactive)";
 /** Download / secondary — neutral */
 export const COLOR_DOWN = "var(--carbon-data-down)";
 
-export function latencyToneClass(ms: number): string {
-  if (ms <= 60) return "ping-tone--good";
-  if (ms <= 120) return "ping-tone--ok";
-  if (ms <= 180) return "ping-tone--fair";
-  if (ms <= 240) return "ping-tone--slow";
-  return "ping-tone--bad";
-}
-
 export function barToneClass(
   metric: "latency" | "loss",
   value: number | null,

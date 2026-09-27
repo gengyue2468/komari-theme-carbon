@@ -1,7 +1,7 @@
-import { Tag, Tile, Tooltip } from "@carbon/react";
+import { Tag, Tile } from "@carbon/react";
 import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import {
   cardPingFromMetrics,
   formatLatencyMs,
@@ -10,16 +10,15 @@ import {
 } from "~/lib/ping-display";
 import { barToneClass } from "~/lib/ping-tone";
 import { QuickIcon } from "~/components/BrandIcon";
-import { InfoTip, PingPointInfo } from "~/components/InfoTip";
 import { RegionFlag } from "~/components/RegionFlag";
 import {
   formatBytes,
   formatDateTimeWithoutSeconds,
   formatRate,
+  formatTrafficUsage,
   formatUptimeWithFormat,
   parseTags,
   percentOf,
-  trafficLimitTypeLabel,
   trafficUsedBytes,
 } from "~/lib/format";
 import { getArchIcon, getOsIcon, getVirtIcon } from "~/lib/os-arch";
@@ -104,8 +103,6 @@ function formatLastSeen(value: string | undefined, language: string): string {
 
 /* ── Card ── */
 
-const SPARK_CELLS = 12;
-
 function PingStrip({
   label,
   value,
@@ -117,11 +114,8 @@ function PingStrip({
   metric: "latency" | "loss";
   bars: Array<{ time: string; latency: number | null; loss: number | null }>;
 }) {
-  const cells =
-    bars.length > 0
-      ? Array.from({ length: SPARK_CELLS }, (_, index) => bars[index % bars.length])
-      : [];
-
+  // Do not repeat the beginning of a history series to fill a fixed width.
+  // Repeating it makes the right edge look like fresh data and hides gaps.
   return (
     <div className="card-spark">
       <div className="card-row">
@@ -129,7 +123,7 @@ function PingStrip({
         <span className="card-row__value numeric">{value}</span>
       </div>
       <div className="card-spark__track" aria-hidden>
-        {cells.map((point, index) => (
+        {bars.map((point, index) => (
           <span
             key={`${point.time}-${index}`}
             className={`card-spark__cell ${barToneClass(metric, metric === "latency" ? point.latency : point.loss)}`}
@@ -208,12 +202,14 @@ function StatGroup({ node, metrics, showUptime }: Pick<NodeCardProps, "node" | "
             unit={trafficPct != null ? "%" : undefined}
             pct={trafficPct}
             hint={
-              node.traffic_limit > 0
-                ? metrics
-                  ? `${formatBytes(trafficUsed)} / ${formatBytes(node.traffic_limit)} / ${trafficLimitTypeLabel(node.traffic_limit_type)}`
-                  : "—"
-                : metrics
-                  ? `${formatBytes(trafficUsed)} / ∞`
+              metrics
+                ? formatTrafficUsage(
+                    trafficUsed,
+                    node.traffic_limit,
+                    node.traffic_limit_type,
+                  )
+                : node.traffic_limit > 0
+                  ? "—"
                   : "— / ∞"
             }
           />
@@ -250,27 +246,24 @@ function StatGroup({ node, metrics, showUptime }: Pick<NodeCardProps, "node" | "
 }
 
 function SectionPing({
-  nodeUuid,
   metrics,
   pingSummary,
   realtimeReady,
   onOpenMore,
 }: {
-  nodeUuid: string;
   metrics?: RealtimeMetrics;
   pingSummary?: NodePingHistorySummary;
   realtimeReady: boolean;
   onOpenMore: () => void;
 }) {
   const { t } = useTranslation();
-  const historySummary = pingSummary;
-  const ping = historySummary
+  const ping = pingSummary
     ? {
-        visible: historySummary.networks.slice(0, 3),
-        extraCount: Math.max(0, historySummary.networks.length - 3),
+        visible: pingSummary.networks.slice(0, 3),
+        extraCount: Math.max(0, pingSummary.networks.length - 3),
       }
     : selectPingNetworks(metrics?.ping);
-  const summary = historySummary ?? cardPingFromMetrics(metrics);
+  const summary = pingSummary ?? cardPingFromMetrics(metrics);
 
   return (
     <section className="card-section">
@@ -279,45 +272,43 @@ function SectionPing({
         <span className="card-row__value">{t("app.statusLoading")}</span>
       ) : ping.visible.length > 0 ? (
         <div className="card-ping-points">
-          {ping.visible.map((point) => (
-            <div className="card-ping-point" key={point.id}>
-              <div className="card-ping-point__head">
-                <span className="card-ping-point__name">
+          {ping.visible.map((point) => {
+            const latencyBars =
+              point.bars?.length
+                ? point.bars
+                : point.latencyMs != null
+                  ? [{ time: point.id, latency: point.latencyMs, loss: null }]
+                  : [];
+            const lossBars =
+              point.bars?.length
+                ? point.bars
+                : point.lossPct != null
+                  ? [{ time: point.id, latency: null, loss: point.lossPct }]
+                  : [];
+            return (
+              <div className="card-ping-point" key={point.id}>
+                <div className="card-ping-point__head">
                   <span className="card-ping-point__name-text">
                     {point.name || point.id}
                   </span>
-                  <InfoTip
-                    label={t("detail.pingPointInfo", { name: point.name || point.id })}
-                    description={
-                      <PingPointInfo point={point} hasHistory={historySummary != null} />
-                    }
+                </div>
+                <div className="card-ping-point__strips">
+                  <PingStrip
+                    label={t("metrics.latency")}
+                    value={formatLatencyMs(point.latencyMs)}
+                    metric="latency"
+                    bars={latencyBars}
                   />
-                </span>
+                  <PingStrip
+                    label={t("metrics.loss")}
+                    value={point.lossPct != null ? `${point.lossPct.toFixed(1)}%` : "—"}
+                    metric="loss"
+                    bars={lossBars}
+                  />
+                </div>
               </div>
-              <div className="card-ping-point__strips">
-                <PingStrip
-                  label={t("metrics.latency")}
-                  value={formatLatencyMs(point.latencyMs)}
-                  metric="latency"
-                  bars={
-                    point.latencyMs != null && point.latencyMs < 0
-                      ? [{ time: point.id, latency: -1, loss: null }]
-                      : historySummary?.bars ?? (point.latencyMs != null
-                        ? [{ time: point.id, latency: point.latencyMs, loss: null }]
-                        : [])
-                  }
-                />
-                <PingStrip
-                  label={t("metrics.loss")}
-                  value={point.lossPct != null ? `${point.lossPct.toFixed(1)}%` : "—"}
-                  metric="loss"
-                  bars={historySummary?.bars ?? (point.lossPct != null
-                    ? [{ time: point.id, latency: null, loss: point.lossPct }]
-                    : [])}
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {ping.extraCount > 0 ? (
             <button
               type="button"
@@ -364,97 +355,86 @@ export const NodeCard = memo(
     lastSeenAt,
     showUptime,
   }: NodeCardProps) {
-  const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const os = useMemo(() => getOsIcon(node.os), [node.os]);
-  const arch = useMemo(
-    () => getArchIcon(node.arch, node.cpu_name),
-    [node.arch, node.cpu_name],
-  );
-  const tags = useMemo(() => parseTags(node.tags), [node.tags]);
+    const { t, i18n } = useTranslation();
+    const navigate = useNavigate();
+    const os = useMemo(() => getOsIcon(node.os), [node.os]);
+    const arch = useMemo(
+      () => getArchIcon(node.arch, node.cpu_name),
+      [node.arch, node.cpu_name],
+    );
+    const tags = useMemo(() => parseTags(node.tags), [node.tags]);
 
-  return (
-    <Tile
-      className={`node-card${!realtimeReady ? " is-loading" : online ? " is-online" : " is-offline"}`}
-    >
-      <a
-        className="node-card__overlay"
-        href={`/node/${node.uuid}`}
-        aria-label={node.name}
-        onClick={(event) => {
-          event.preventDefault();
-          navigate(`/node/${node.uuid}`);
-        }}
-      />
-      {realtimeReady && !online ? (
-        <div className="node-card__offline-note" role="status">
-          <strong>{t("app.offline")}</strong>
-          <span>
-            {t("detail.lastSeen")} {formatLastSeen(lastSeenAt, i18n.language)}
-          </span>
-        </div>
-      ) : null}
-      <div className="node-card__content">
-        <div className="node-card__head">
-          <div className="node-card__head-left">
-            <h3 className="node-card__title" title={node.name}>
-              <RegionFlag region={node.region} className="node-card__flag" />
-              <span className="node-card__title-text">{node.name}</span>
-            </h3>
+    return (
+      <Tile
+        className={`node-card${!realtimeReady ? " is-loading" : online ? " is-online" : " is-offline"}`}
+      >
+        <Link
+          className="node-card__overlay"
+          to={`/node/${node.uuid}`}
+          aria-label={node.name}
+        />
+        {realtimeReady && !online ? (
+          <div className="node-card__offline-note" role="status">
+            <strong>{t("app.offline")}</strong>
+            <span>
+              {t("detail.lastSeen")} {formatLastSeen(lastSeenAt, i18n.language)}
+            </span>
           </div>
-          <div className="node-card__head-right">
-            {!realtimeReady || online ? (
-              <Tooltip
-                as="span"
-                label={!realtimeReady ? t("app.statusLoading") : t("app.online")}
-                align="top"
-              >
+        ) : null}
+        <div className="node-card__content">
+          <div className="node-card__head">
+            <div className="node-card__head-left">
+              <h3 className="node-card__title" title={node.name}>
+                <RegionFlag region={node.region} className="node-card__flag" />
+                <span className="node-card__title-text">{node.name}</span>
+              </h3>
+            </div>
+            <div className="node-card__head-right">
+              {!realtimeReady || online ? (
                 <span
                   className={`node-card__status-dot${!realtimeReady ? " is-loading" : ""}`}
                   role="status"
                   aria-label={!realtimeReady ? t("app.statusLoading") : t("app.online")}
                 />
-              </Tooltip>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="node-card__sub">
-          {node.group ? (
-            <Tag type="blue" size="sm">
-              {node.group}
-            </Tag>
-          ) : null}
-          <div className="node-card__sub-meta">
-            <span className="node-card__cpu">{node.cpu_name}</span>
-            <div className="node-card__badges">
-              <QuickIcon icon={os.icon} size={16} title={os.label} />
-              <QuickIcon icon={arch.icon} size={16} title={arch.label} />
+              ) : null}
             </div>
           </div>
-        </div>
 
-        <StatGroup node={node} metrics={metrics} showUptime={showUptime} />
-        <SectionPing
-          nodeUuid={node.uuid}
-          metrics={metrics}
-           pingSummary={pingSummary}
-          realtimeReady={realtimeReady}
-          onOpenMore={() => navigate(`/node/${node.uuid}#ping-chart`)}
-        />
-
-        {tags.length > 0 && (
-          <div className="node-card__tags">
-            {tags.map((tag) => (
-              <Tag key={tag} type="gray" size="sm">
-                {tag}
+          <div className="node-card__sub">
+            {node.group ? (
+              <Tag type="blue" size="sm">
+                {node.group}
               </Tag>
-            ))}
+            ) : null}
+            <div className="node-card__sub-meta">
+              <span className="node-card__cpu">{node.cpu_name}</span>
+              <div className="node-card__badges">
+                <QuickIcon icon={os.icon} size={16} title={os.label} />
+                <QuickIcon icon={arch.icon} size={16} title={arch.label} />
+              </div>
+            </div>
           </div>
-        )}
-      </div>
-    </Tile>
-  );
+
+          <StatGroup node={node} metrics={metrics} showUptime={showUptime} />
+          <SectionPing
+            metrics={metrics}
+            pingSummary={pingSummary}
+            realtimeReady={realtimeReady}
+            onOpenMore={() => navigate(`/node/${node.uuid}#ping-chart`)}
+          />
+
+          {tags.length > 0 && (
+            <div className="node-card__tags">
+              {tags.map((tag) => (
+                <Tag key={tag} type="gray" size="sm">
+                  {tag}
+                </Tag>
+              ))}
+            </div>
+          )}
+        </div>
+      </Tile>
+    );
   },
   (prev, next) =>
     prev.online === next.online &&

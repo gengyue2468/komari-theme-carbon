@@ -95,11 +95,6 @@ body {
   font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
 }
 
-.mono {
-  font-family: "IBM Plex Mono", Menlo, monospace;
-  font-variant-numeric: tabular-nums;
-}
-
 /* Use aligned numerals without turning ordinary dashboard copy into code. */
 .numeric {
   font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
@@ -799,28 +794,6 @@ body {
   fill: transparent;
 }
 
-.node-map__tooltip {
-  position: absolute;
-  left: $spacing-03;
-  bottom: $spacing-03;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: $spacing-02 $spacing-03;
-  background: $layer-01;
-  border: 1px solid $border-subtle-01;
-  @include type-style("helper-text-01");
-  color: $text-secondary;
-  pointer-events: none;
-  max-width: calc(100% - #{$spacing-05});
-  z-index: 2;
-}
-
-.node-map__tooltip strong {
-  color: $text-primary;
-  font-weight: 600;
-}
-
 .home-stat-card.cds--tile {
   min-height: 0;
   height: 100%;
@@ -862,8 +835,7 @@ body {
   height: 100%;
 }
 
-.finance-stat .cds--popover-container,
-.finance-stat .cds--popover {
+.finance-stat > .cds--popover-container {
   width: 100%;
   height: 100%;
   display: block;
@@ -966,8 +938,7 @@ body {
   height: 100%;
 }
 
-.stat-popover-wrap .cds--popover-container,
-.stat-popover-wrap .cds--popover {
+.stat-popover-wrap > .cds--popover-container {
   width: 100%;
   height: 100%;
   display: block;
@@ -1271,6 +1242,11 @@ body {
   gap: 0;
   padding: 0 0 $spacing-04 0;
   border: 1px solid transparent;
+  background-color: $layer-01;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .node-card.is-offline {
@@ -1285,9 +1261,11 @@ body {
   opacity: 1;
 }
 
-.node-card.cds--tile:hover {
-  background: $layer-hover-01;
+.node-card.cds--tile:hover,
+.node-card.cds--tile:focus-within {
+  background-color: $layer-hover-01;
   border-color: $border-subtle-01;
+  box-shadow: inset 0 0 0 1px $border-subtle-01;
 }
 
 .node-card__overlay {
@@ -1655,20 +1633,13 @@ body {
   align-items: baseline;
   gap: $spacing-03;
   min-width: 0;
-}
-
-.card-ping-point__name {
-  display: inline-flex;
-  align-items: center;
-  gap: $spacing-01;
   @include type-style("helper-text-01");
-  flex: 1 1 auto;
-  min-width: 0;
   color: $text-primary;
   font-weight: 400;
 }
 
 .card-ping-point__name-text {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1734,23 +1705,6 @@ body {
 
 .card-spark__cell.ping-bar__cell--bad {
   background: $support-error;
-}
-
-.ping-tone--good {
-  color: $interactive;
-}
-
-.ping-tone--ok {
-  color: $support-warning;
-}
-
-.ping-tone--fair,
-.ping-tone--slow {
-  color: $support-warning;
-}
-
-.ping-tone--bad {
-  color: $support-error;
 }
 
 .card-ping-points__more {
@@ -2043,13 +1997,6 @@ body {
   color: $text-secondary;
 }
 
-.table-ping-cell__name {
-  display: inline-flex;
-  align-items: center;
-  gap: $spacing-01;
-  min-width: 0;
-}
-
 .table-ping-cell__name-text {
   min-width: 0;
   overflow: hidden;
@@ -2103,15 +2050,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: $spacing-06;
-}
-
-.detail-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: $spacing-05;
-  padding: $spacing-09 $spacing-05;
-  text-align: center;
 }
 
 .detail-top__left {
@@ -2402,58 +2340,6 @@ body {
   min-width: 0;
 }
 
-.info-tip__trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 0.75rem;
-  height: 0.75rem;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: $icon-secondary;
-  cursor: help;
-  flex-shrink: 0;
-  line-height: 0;
-}
-
-.info-tip {
-  display: inline-flex;
-  align-items: center;
-  width: 0.75rem;
-  height: 0.75rem;
-  line-height: 0;
-  vertical-align: middle;
-}
-
-.info-tip__content {
-  font-size: 0.75rem;
-  line-height: 1.35;
-}
-
-.ping-info-tip {
-  display: inline-flex;
-  flex-direction: column;
-  gap: $spacing-01;
-  font-size: 0.75rem;
-  line-height: 1.35;
-}
-
-.ping-info-tip__assessment {
-  margin-top: $spacing-01;
-  color: $text-inverse;
-}
-
-.info-tip__trigger:hover {
-  color: $icon-primary;
-}
-
-.info-tip__trigger:focus-visible {
-  outline: 2px solid $focus;
-  outline-offset: 2px;
-}
-
 .detail-info-cell__value {
   @include type-style("body-compact-01");
   word-break: break-word;
@@ -2729,18 +2615,6 @@ html:not([data-carbon-theme="g100"]) .ping-task-card {
   align-items: center;
   gap: $spacing-02;
   color: var(--carbon-data-down);
-}
-
-.chart-panel {
-  background: $layer-01;
-  border: 1px solid $border-subtle-01;
-  padding: $spacing-05;
-}
-
-.chart-panel__header {
-  gap: $spacing-05;
-  flex-wrap: wrap;
-  margin-bottom: $spacing-05;
 }
 
 /* ── Load chart panel (Emerald 6-cell grid, Carbon charts) ── */
@@ -3109,27 +2983,8 @@ html:not([data-carbon-theme="g100"]) .ping-task-card.is-active:hover {
   }
 }
 
-.chart-panel__header h3 {
-  @include type-style("heading-compact-01");
-  margin: 0;
-}
-
-.chart-panel__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: $spacing-05;
-  margin-bottom: $spacing-04;
-  color: $text-secondary;
-  @include type-style("label-01");
-}
-
 @media (max-width: 66rem) {
   .detail-finance-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .detail-route-placeholder__metrics,
-  .detail-route-placeholder__finance {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3157,21 +3012,6 @@ html:not([data-carbon-theme="g100"]) .ping-task-card.is-active:hover {
   .detail-info-cell.is-wide {
     grid-column: auto;
   }
-}
-
-.hydrate-fallback {
-  min-height: 100vh;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: $spacing-04;
-  background: $background;
-}
-
-.hydrate-fallback__block {
-  width: min(18rem, 60vw);
-  height: 1rem;
-  background: $layer-accent-01;
 }
 
 .detail-route-placeholder {
@@ -3202,24 +3042,22 @@ html:not([data-carbon-theme="g100"]) .ping-task-card.is-active:hover {
   gap: $spacing-06;
 }
 
+/* Keep route-loading metric groups aligned with the detail layout below 66rem.
+   This override must follow the base four-column declaration. */
+@media (max-width: 66rem) {
+  .detail-route-placeholder__metrics,
+  .detail-route-placeholder__finance {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 42rem) {
-  .app-shell,
-  .hydrate-fallback {
+  .app-shell {
     min-height: 100svh;
   }
 
   .node-table__scroll-hint {
     display: block;
-  }
-
-  .home-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .home-bar__tools {
-    width: 100%;
-    justify-content: space-between;
   }
 
   .home-search {
@@ -3420,10 +3258,6 @@ html[data-density="compact"] {
 
   .load-chart-grid {
     gap: $spacing-04;
-  }
-
-  .detail-metric-grid {
-    gap: $spacing-03;
   }
 
   .cds--data-table td {

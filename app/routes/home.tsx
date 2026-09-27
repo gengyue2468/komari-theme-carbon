@@ -126,6 +126,8 @@ export default function Home() {
   const realtimeReady = useNodesStore((s) => s.realtimeReady);
   const loading = useNodesStore((s) => s.loading);
   const error = useNodesStore((s) => s.error);
+  const recordEnabled =
+    useNodesStore((s) => s.publicSettings?.record_enabled) !== false;
   const showUptime = useNodesStore((s) => s.showUptime);
   const viewMode = useNodesStore((s) => s.viewMode);
   const setViewMode = useNodesStore((s) => s.setViewMode);
@@ -133,7 +135,7 @@ export default function Home() {
   const recentPingQuery = useQuery({
     queryKey: queryKeys.recentPingHistory(1),
     queryFn: ({ signal }) => dataSource.getRecentPingHistory(1, signal),
-    enabled: recentPingEnabled && nodes.length > 0,
+    enabled: recentPingEnabled && recordEnabled && nodes.length > 0,
     staleTime: 60_000,
     gcTime: 60_000,
     refetchInterval: 60_000,

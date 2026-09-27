@@ -46,10 +46,22 @@ interface IpApiResponse {
   city?: string;
 }
 
+type VisitorDevice = "desktop" | "android" | "iphone" | "ipad" | "tablet";
+type VisitorBrowser =
+  | "unknown"
+  | "edge"
+  | "opera"
+  | "chrome"
+  | "firefox"
+  | "safari";
+
 interface VisitorClient {
-  device: string;
-  browser: string;
+  device: VisitorDevice;
+  browser: VisitorBrowser;
 }
+
+const VISITOR_GEO_CACHE_KEY = "komari-carbon-visitor-geo-v1";
+const VISITOR_GEO_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 function maskIpv4(value: string): string | null {
   const parts = value.split(".");
@@ -74,30 +86,71 @@ function maskIp(value: string): string {
 }
 
 function detectClient(userAgent: string): VisitorClient {
-  let device = "Desktop";
-  if (/android/i.test(userAgent)) device = "Android";
-  else if (/iphone|ipod/i.test(userAgent)) device = "iPhone";
-  else if (/ipad/i.test(userAgent)) device = "iPad";
-  else if (/tablet/i.test(userAgent)) device = "Tablet";
+  let device: VisitorDevice = "desktop";
+  if (/android/i.test(userAgent)) device = "android";
+  else if (/iphone|ipod/i.test(userAgent)) device = "iphone";
+  else if (/ipad/i.test(userAgent)) device = "ipad";
+  else if (/tablet/i.test(userAgent)) device = "tablet";
 
-  let browser = "Unknown browser";
-  if (/Edg\//i.test(userAgent)) browser = "Edge";
-  else if (/OPR\//i.test(userAgent)) browser = "Opera";
-  else if (/Chrome\//i.test(userAgent)) browser = "Chrome";
-  else if (/Firefox\//i.test(userAgent)) browser = "Firefox";
-  else if (/Safari/i.test(userAgent) && !/Chrome/i.test(userAgent)) browser = "Safari";
+  let browser: VisitorBrowser = "unknown";
+  if (/Edg\//i.test(userAgent)) browser = "edge";
+  else if (/OPR\//i.test(userAgent)) browser = "opera";
+  else if (/Chrome\//i.test(userAgent)) browser = "chrome";
+  else if (/Firefox\//i.test(userAgent)) browser = "firefox";
+  else if (/Safari/i.test(userAgent) && !/Chrome/i.test(userAgent)) browser = "safari";
 
   return { device, browser };
 }
 
 function locationFrom(parts: Array<string | undefined>): string {
-  return parts.filter(Boolean).join(" · ") || "Unknown location";
+  return parts.filter(Boolean).join(" · ");
+}
+
+function readCachedGeo(): VisitorGeo | null {
+  try {
+    const raw = sessionStorage.getItem(VISITOR_GEO_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as Partial<VisitorGeo> & { cachedAt?: number };
+    if (
+      !cached.cachedAt ||
+      Date.now() - cached.cachedAt > VISITOR_GEO_CACHE_TTL ||
+      typeof cached.ip !== "string"
+    ) {
+      sessionStorage.removeItem(VISITOR_GEO_CACHE_KEY);
+      return null;
+    }
+    return {
+      ip: cached.ip,
+      isp: typeof cached.isp === "string" ? cached.isp : "",
+      location: typeof cached.location === "string" ? cached.location : "",
+      countryCode:
+        typeof cached.countryCode === "string" ? cached.countryCode : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedGeo(geo: VisitorGeo) {
+  try {
+    // Keep only the already-masked address in session storage.
+    sessionStorage.setItem(
+      VISITOR_GEO_CACHE_KEY,
+      JSON.stringify({
+        ...geo,
+        ip: maskIp(geo.ip),
+        cachedAt: Date.now(),
+      }),
+    );
+  } catch {
+    // Storage can be unavailable in privacy-restricted browser contexts.
+  }
 }
 
 async function fetchJson<T>(
   url: string,
   outerSignal: AbortSignal,
-  timeoutMs = 4_500,
+  timeoutMs = 2_500,
 ): Promise<T> {
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -114,47 +167,70 @@ async function fetchJson<T>(
 }
 
 async function fetchVisitorGeo(signal: AbortSignal): Promise<VisitorGeo | null> {
-  const loaders: Array<() => Promise<VisitorGeo>> = [
-    async () => {
-      const data = await fetchJson<IpWhoResponse>("https://ipwho.is/", signal);
+  if (signal.aborted) return null;
+  const cached = readCachedGeo();
+  if (cached) return cached;
+
+  const requestController = new AbortController();
+  const abortRequest = () => requestController.abort();
+  const deadline = window.setTimeout(abortRequest, 5_500);
+  signal.addEventListener("abort", abortRequest, { once: true });
+
+  const loaders: Array<(requestSignal: AbortSignal) => Promise<VisitorGeo>> = [
+    async (requestSignal) => {
+      const data = await fetchJson<IpWhoResponse>("https://ipwho.is/", requestSignal);
       if (data.success === false || !data.ip) throw new Error(data.message || "ipwho.is unavailable");
       return {
         ip: data.ip,
-        isp: data.connection?.isp || data.connection?.org || "Unknown ISP",
+        isp: data.connection?.isp || data.connection?.org || "",
         location: locationFrom([data.country, data.region, data.city]),
         countryCode: data.country_code || "",
       };
     },
-    async () => {
-      const data = await fetchJson<IpSbResponse>("https://api.ip.sb/geoip", signal);
+    async (requestSignal) => {
+      const data = await fetchJson<IpSbResponse>(
+        "https://api.ip.sb/geoip",
+        requestSignal,
+      );
       if (!data.ip) throw new Error("ip.sb unavailable");
       return {
         ip: data.ip,
-        isp: data.isp || data.organization || data.asn_organization || "Unknown ISP",
+        isp: data.isp || data.organization || data.asn_organization || "",
         location: locationFrom([data.country, data.region, data.city]),
         countryCode: data.country_code || "",
       };
     },
-    async () => {
-      const data = await fetchJson<IpApiResponse>("https://ipapi.co/json/", signal);
+    async (requestSignal) => {
+      const data = await fetchJson<IpApiResponse>(
+        "https://ipapi.co/json/",
+        requestSignal,
+      );
       if (data.error || !data.ip) throw new Error(data.reason || "ipapi unavailable");
       return {
         ip: data.ip,
-        isp: data.org || "Unknown ISP",
+        isp: data.org || "",
         location: locationFrom([data.country_name, data.region, data.city]),
         countryCode: data.country_code || "",
       };
     },
   ];
 
-  for (const load of loaders) {
-    try {
-      return await load();
-    } catch {
-      if (signal.aborted) return null;
+  try {
+    for (const load of loaders) {
+      try {
+        if (requestController.signal.aborted) return null;
+        const result = await load(requestController.signal);
+        writeCachedGeo(result);
+        return result;
+      } catch {
+        if (signal.aborted || requestController.signal.aborted) return null;
+      }
     }
+    return null;
+  } finally {
+    window.clearTimeout(deadline);
+    signal.removeEventListener("abort", abortRequest);
   }
-  return null;
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -172,35 +248,59 @@ export function VisitorInfoCard() {
   const [visible, setVisible] = useState(true);
   const [loading, setLoading] = useState(true);
   const [geo, setGeo] = useState<VisitorGeo | null>(null);
-  const [client, setClient] = useState<VisitorClient>({ device: "Desktop", browser: "Unknown browser" });
+  const [client, setClient] = useState<VisitorClient>({
+    device: "desktop",
+    browser: "unknown",
+  });
+  const [visitAt, setVisitAt] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!visible) return;
     const controller = new AbortController();
     let active = true;
     setClient(detectClient(navigator.userAgent));
+    setVisitAt(Date.now());
 
-    void fetchVisitorGeo(controller.signal)
-      .then((result) => {
-        if (active) setGeo(result);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    const load = () => {
+      if (!active) return;
+      void fetchVisitorGeo(controller.signal)
+        .then((result) => {
+          if (active) setGeo(result);
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    };
+    let idleId: number | null = null;
+    let timeoutId: number | null = null;
+    if (typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(load, { timeout: 1_200 });
+    } else {
+      timeoutId = window.setTimeout(load, 0);
+    }
 
     return () => {
       active = false;
       controller.abort();
+      if (idleId != null) window.cancelIdleCallback(idleId);
+      if (timeoutId != null) window.clearTimeout(timeoutId);
     };
-  }, []);
+  }, [visible]);
 
-  const location = loading ? t("visitor.loading") : geo?.location || t("visitor.unavailable");
+  const device = t(`visitor.devices.${client.device}`);
+  const browser = t(`visitor.browsers.${client.browser}`);
+  const location = loading
+    ? t("visitor.loading")
+    : geo?.location || t("visitor.unknownLocation");
   const ip = loading ? t("visitor.loading") : geo ? maskIp(geo.ip) : t("visitor.unavailable");
-  const isp = loading ? t("visitor.loading") : geo?.isp || t("visitor.unavailable");
+  const isp = loading ? t("visitor.loading") : geo?.isp || t("visitor.unknownIsp");
   const countryCode = geo?.countryCode.toUpperCase() || "";
-  const visitTime = new Intl.DateTimeFormat(i18n.language, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date());
+  const visitTime = visitAt
+    ? new Intl.DateTimeFormat(i18n.language, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(visitAt))
+    : t("visitor.loading");
 
   if (!visible) return null;
 
@@ -243,17 +343,17 @@ export function VisitorInfoCard() {
 
         {!expanded ? (
           <div className="visitor-card__summary" aria-live="polite">
-            <span><b>IP</b> {ip}</span>
-            <span><b>{t("visitor.device")}</b> {client.device}</span>
-            <span><b>{t("visitor.browser")}</b> {client.browser}</span>
+            <span><b>{t("visitor.ip")}</b> {ip}</span>
+            <span><b>{t("visitor.device")}</b> {device}</span>
+            <span><b>{t("visitor.browser")}</b> {browser}</span>
           </div>
         ) : null}
 
         {expanded ? (
           <div className="visitor-card__details">
             <DetailRow label={t("visitor.ip")} value={ip} />
-            <DetailRow label={t("visitor.device")} value={client.device} />
-            <DetailRow label={t("visitor.browser")} value={client.browser} />
+            <DetailRow label={t("visitor.device")} value={device} />
+            <DetailRow label={t("visitor.browser")} value={browser} />
             <DetailRow label={t("visitor.isp")} value={isp} />
             <DetailRow label={t("visitor.location")} value={location} />
             <DetailRow label={t("visitor.visitTime")} value={visitTime} />

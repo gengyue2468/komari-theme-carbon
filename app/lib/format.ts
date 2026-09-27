@@ -112,14 +112,6 @@ export function formatUptimeWithFormat(
   });
 }
 
-export function formatDuration(seconds: number): string {
-  return formatUptimeWithFormat(seconds, "minute");
-}
-
-export function formatUptime(seconds: number): string {
-  return formatUptimeWithFormat(seconds, "second");
-}
-
 const DATE_TIME_MINUTE_OPTIONS: Intl.DateTimeFormatOptions = {
   year: "numeric",
   month: "2-digit",
@@ -207,6 +199,19 @@ export function trafficUsedBytes(
     default:
       return Math.max(up, down);
   }
+}
+
+/** Format traffic consistently across cards, tables, and node details. */
+export function formatTrafficUsage(
+  used: number,
+  limit: number,
+  limitType?: string | null,
+): string {
+  const usedText = formatBytes(used);
+  if (limit > 0) {
+    return `${usedText} / ${formatBytes(limit)} / ${trafficLimitTypeLabel(limitType)}`;
+  }
+  return `${usedText} / ∞`;
 }
 
 /** Localized label for Komari traffic_limit_type (max/sum/min/up/down). */

@@ -29,7 +29,3 @@ export function getRegionCode(region: string): string | null {
   if (match?.[0]) return regionalIndicatorsToCode(match[0]);
   return regionalIndicatorsToCode(raw);
 }
-
-export function hasRegion(region: string): boolean {
-  return getRegionCode(region) != null;
-}

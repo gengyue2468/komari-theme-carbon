@@ -8,6 +8,8 @@ export interface PingNetworkDisplay {
   name: string;
   latencyMs: number | null;
   lossPct?: number;
+  /** History sparkline for this monitoring point, when history is available. */
+  bars?: PingSparkPoint[];
 }
 
 /** Build 三网-style list from live status.ping map */
@@ -30,26 +32,28 @@ export function networksFromLivePing(
 export type IspCategory = "CT" | "CU" | "CM";
 
 export function categorizeIsp(name: string): IspCategory | null {
-  const s = name.toLowerCase();
+  const s = name.trim().toLowerCase();
+  const hasToken = (token: string) =>
+    new RegExp(`(?:^|[^a-z])${token}(?:$|[^a-z])`, "i").test(s);
   if (
     s.includes("电信") ||
-    s.includes("telecom") ||
-    s.includes("ct") ||
-    s.includes("chinatelecom")
+    s.includes("chinatelecom") ||
+    hasToken("telecom") ||
+    hasToken("ct")
   )
     return "CT";
   if (
     s.includes("联通") ||
-    s.includes("unicom") ||
-    s.includes("cu") ||
-    s.includes("chinaunicom")
+    s.includes("chinaunicom") ||
+    hasToken("unicom") ||
+    hasToken("cu")
   )
     return "CU";
   if (
     s.includes("移动") ||
-    s.includes("mobile") ||
-    s.includes("cm") ||
-    s.includes("chinamobile")
+    s.includes("chinamobile") ||
+    hasToken("mobile") ||
+    hasToken("cm")
   )
     return "CM";
   return null;
@@ -96,13 +100,45 @@ function mean(values: number[]): number | null {
     : null;
 }
 
+function buildSparkBars(
+  records: TimedPingRecord[],
+  first: number,
+  last: number,
+  bucketCount: number,
+): PingSparkPoint[] {
+  if (!records.length || bucketCount <= 0) return [];
+
+  const bucketSize = Math.max(1, (last - first) / bucketCount);
+  return Array.from({ length: bucketCount }, (_, index) => {
+    const start = first + bucketSize * index;
+    const end = index === bucketCount - 1 ? last + 1 : start + bucketSize;
+    const bucket = records.filter(
+      (record) => record.timestamp >= start && record.timestamp < end,
+    );
+    const valid = bucket.filter((record) => record.value >= 0);
+    return {
+      time: new Date(start).toISOString(),
+      latency:
+        bucket.length > 0 && valid.length === 0
+          ? -1
+          : mean(valid.map((record) => record.value)),
+      loss: bucket.length
+        ? ((bucket.length - valid.length) / bucket.length) * 100
+        : null,
+    };
+  });
+}
+
 function roundLatency(value: number): number {
   return Number(value.toFixed(1));
 }
 
 export function formatLatencyMs(value: number | null): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  if (value < 0) return "-1ms";
+  // Komari uses negative latency values as packet-loss sentinels. Do not show
+  // that internal value as a real latency; the loss percentage is displayed
+  // beside it and the spark bar still uses the error tone.
+  if (value < 0) return "—";
   return `${value.toFixed(1)}ms`;
 }
 
@@ -127,6 +163,23 @@ function buildSummaryFromRecords(
   const taskName = new Map(
     tasks.map((task) => [task.id, task.name || i18n.t("detail.task", { id: task.id })]),
   );
+  const first = records[0].timestamp;
+  const last = records[records.length - 1].timestamp;
+  const barsByTask = new Map<number, PingSparkPoint[]>();
+  for (const taskId of taskIds) {
+    const taskRecords = records.filter((record) => record.task_id === taskId);
+    const taskFirst = taskRecords[0]?.timestamp ?? first;
+    const taskLast = taskRecords[taskRecords.length - 1]?.timestamp ?? last;
+    barsByTask.set(
+      taskId,
+      buildSparkBars(
+        taskRecords,
+        taskFirst,
+        taskLast,
+        Math.min(NODE_PING_BAR_COUNT, taskRecords.length),
+      ),
+    );
+  }
   const networkAverages: number[] = [];
   const orderedTaskIds = [
     ...tasks.map((task) => task.id),
@@ -144,31 +197,16 @@ function buildSummaryFromRecords(
       name: taskName.get(id) ?? i18n.t("detail.task", { id }),
       latencyMs: avg == null ? -1 : roundLatency(avg),
       lossPct: Number(loss.toFixed(1)),
+      bars: barsByTask.get(id) ?? [],
     };
   });
 
-  const first = records[0].timestamp;
-  const last = records[records.length - 1].timestamp;
-  const bucketCount = Math.min(NODE_PING_BAR_COUNT, records.length);
-  const bucketSize = Math.max(1, (last - first) / bucketCount);
-  const bars = Array.from({ length: bucketCount }, (_, index) => {
-    const start = first + bucketSize * index;
-    const end = index === bucketCount - 1 ? last + 1 : start + bucketSize;
-    const bucket = records.filter(
-      (record) => record.timestamp >= start && record.timestamp < end,
-    );
-    const valid = bucket.filter((record) => record.value >= 0);
-    return {
-      time: new Date(start).toISOString(),
-      latency:
-        bucket.length > 0 && valid.length === 0
-          ? -1
-          : mean(valid.map((record) => record.value)),
-      loss: bucket.length
-        ? ((bucket.length - valid.length) / bucket.length) * 100
-        : null,
-    };
-  });
+  const bars = buildSparkBars(
+    records,
+    first,
+    last,
+    Math.min(NODE_PING_BAR_COUNT, records.length),
+  );
 
   const averageLatency = mean(networkAverages);
   return {
@@ -177,20 +215,6 @@ function buildSummaryFromRecords(
     avgLatencyMs: averageLatency == null ? null : roundLatency(averageLatency),
     avgLossPct: mean(networks.map((network) => network.lossPct ?? 0)),
   };
-}
-
-/** Reduce the shared one-hour Ping history into the compact node summary. */
-export function buildNodePingHistorySummary(
-  hist: PingHistoryResponse | undefined,
-  uuid: string,
-): NodePingHistorySummary | null {
-  if (!hist) return null;
-  const records = hist.records
-    .filter((record) => record.client === uuid)
-    .map((record) => ({ ...record, timestamp: new Date(record.time).getTime() }))
-    .filter((record) => Number.isFinite(record.timestamp))
-    .sort((a, b) => a.timestamp - b.timestamp);
-  return buildSummaryFromRecords(records, hist.tasks);
 }
 
 /** Build all node summaries in one pass over the shared history response. */
@@ -389,6 +413,12 @@ export function buildPingChartModel(
       task.avg = server?.avg ?? vals.reduce((a, b) => a + b, 0) / vals.length;
       task.min = server?.min ?? Math.min(...vals);
       task.max = server?.max ?? Math.max(...vals);
+    } else if (total > 0) {
+      // API summaries use zero for min/max/avg when every sample is a loss.
+      // Keep those fields unavailable instead of presenting 0ms as latency.
+      task.avg = null;
+      task.min = null;
+      task.max = null;
     }
     task.samples = server?.total ?? total;
     if (server?.loss == null && total > 0) {
@@ -396,39 +426,12 @@ export function buildPingChartModel(
     }
   }
 
+  // Keep missing samples missing. Do not synthesize global null slots here:
+  // long-range API responses are intentionally downsampled, so their normal
+  // interval can be much larger than the task's live interval. A synthetic
+  // null between every downsampled sample would leave only one-point line
+  // segments and make 12h/1d charts appear to contain loss markers only.
   const pointEntries = [...byTime.entries()].sort(([a], [b]) => a - b);
-  for (const task of taskMap.values()) {
-    const id = task.id;
-    const valid = pointEntries
-      .map(([, slot], index) => ({ index, value: slot.values[id] }))
-      .filter((item): item is { index: number; value: number } =>
-        typeof item.value === "number" && Number.isFinite(item.value),
-      );
-    if (valid.length < 2) continue;
-    const gaps: number[] = [];
-    for (let i = 1; i < valid.length; i += 1) {
-      const previous = pointEntries[valid[i - 1].index][0];
-      const current = pointEntries[valid[i].index][0];
-      if (current > previous) gaps.push(current - previous);
-    }
-    const medianGap = gaps.length ? gaps.sort((a, b) => a - b)[Math.floor(gaps.length / 2)] : fallbackIntervalMs;
-    const maxGap = Math.min(30 * 60_000, Math.max(2 * 60_000, medianGap * 6));
-    for (let i = 0; i < valid.length - 1; i += 1) {
-      const left = valid[i];
-      const right = valid[i + 1];
-      const t0 = pointEntries[left.index][0];
-      const t1 = pointEntries[right.index][0];
-      if (t1 - t0 > maxGap) continue;
-      const v0 = left.value;
-      const v1 = right.value;
-      for (let j = left.index + 1; j < right.index; j += 1) {
-        const slot = pointEntries[j][1];
-        if (slot.values[id] != null || slot.losses[id]) continue;
-        const ratio = (pointEntries[j][0] - t0) / (t1 - t0);
-        slot.values[id] = v0 + (v1 - v0) * ratio;
-      }
-    }
-  }
 
   const points: PingChartPoint[] = pointEntries.map(([time, slot]) => ({
     time: new Date(time).toISOString(),
